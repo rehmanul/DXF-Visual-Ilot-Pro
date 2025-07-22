@@ -57,9 +57,8 @@ class CADProcessor:
             msp = doc.modelspace()
             
             # Process blocks first
-            for block_name in doc.blocks:
+            for block_name, block in doc.blocks.items():
                 if not block_name.startswith('*'):  # Skip anonymous blocks
-                    block = doc.blocks[block_name]
                     self.blocks[block_name] = []
                     for entity in block:
                         self._process_entity(entity, is_block=True)
