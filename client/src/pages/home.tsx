@@ -6,6 +6,7 @@ import UploadZone from "@/components/upload-zone";
 import RoomAnalysis from "@/components/room-analysis";
 import FloorPlanCanvas from "@/components/floor-plan-canvas";
 import { FloorPlan3DViewer } from "@/components/3d-floor-plan-viewer";
+import { AdvancedFloorPlanRenderer } from "@/components/advanced-floor-plan-renderer";
 import ExportPanel from "@/components/export-panel";
 import { ProcessingResult } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +41,8 @@ export default function Home() {
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processingMessage, setProcessingMessage] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [ilotLayout, setIlotLayout] = useState<any>(null);
+  const [isGeneratingIlots, setIsGeneratingIlots] = useState(false);
   const queryClient = useQueryClient();
 
   // Setup WebSocket connection
@@ -131,6 +134,45 @@ export default function Home() {
     }
   };
 
+  // Îlot generation mutation
+  const ilotGenerationMutation = useMutation({
+    mutationFn: async (params: { floorPlanId: number, corridorWidth: number, targetDensity: number }) => {
+      const response = await fetch(`/api/floor-plans/${params.floorPlanId}/generate-ilots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          corridorWidth: params.corridorWidth,
+          targetDensity: params.targetDensity
+        })
+      });
+      if (!response.ok) throw new Error('Failed to generate îlots');
+      return response.json();
+    },
+    onMutate: () => {
+      setIsGeneratingIlots(true);
+    },
+    onSuccess: (data) => {
+      setIlotLayout(data.layout);
+      queryClient.invalidateQueries({ queryKey: ['/api/floor-plans', selectedFloorPlanId] });
+    },
+    onError: (error) => {
+      console.error('Îlot generation failed:', error);
+    },
+    onSettled: () => {
+      setIsGeneratingIlots(false);
+    }
+  });
+
+  const handleGenerateIlots = (corridorWidth: number = 1.2, targetDensity: number = 0.6) => {
+    if (selectedFloorPlanId) {
+      ilotGenerationMutation.mutate({
+        floorPlanId: selectedFloorPlanId,
+        corridorWidth,
+        targetDensity
+      });
+    }
+  };
+
   return (
     <ResponsiveLayout currentStep={currentStep} onStepChange={setCurrentStep}>
       <div className="space-y-6">
@@ -214,26 +256,46 @@ export default function Home() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <Button 
-                        onClick={handleAILabeling} 
-                        disabled={aiLabelMutation.isPending}
-                        className="flex-1 mr-2"
-                      >
-                        {aiLabelMutation.isPending ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                            AI Labeling...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            Enhance with AI
-                          </>
-                        )}
-                      </Button>
-                      <Button variant="outline" onClick={() => setCurrentStep(3)}>
-                        Continue <Eye className="w-4 h-4 ml-2" />
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={handleAILabeling} 
+                          disabled={aiLabelMutation.isPending}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          {aiLabelMutation.isPending ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin mr-2" />
+                              AI Labeling...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4 mr-2" />
+                              AI Labels
+                            </>
+                          )}
+                        </Button>
+                        <Button 
+                          onClick={() => handleGenerateIlots(1.2, 0.6)} 
+                          disabled={isGeneratingIlots}
+                          className="flex-1"
+                        >
+                          {isGeneratingIlots ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Layers3 className="w-4 h-4 mr-2" />
+                              Generate Îlots
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <Button variant="outline" onClick={() => setCurrentStep(3)} className="w-full">
+                        Continue to Visualization <Eye className="w-4 h-4 ml-2" />
                       </Button>
                     </div>
                   </div>
@@ -313,19 +375,19 @@ export default function Home() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="h-[60vh] sm:h-[70vh] lg:h-[80vh] rounded-lg overflow-hidden border border-gray-200 bg-white">
+              <div className="rounded-lg overflow-hidden">
                 {viewMode === '2d' ? (
-                  <FloorPlanCanvas 
+                  <AdvancedFloorPlanRenderer
                     floorPlan={floorPlanData.floorPlan}
-                    rooms={floorPlanData.rooms || []}
-                    measurements={floorPlanData.measurements || []}
+                    layout={ilotLayout}
+                    className="w-full"
+                    onIlotSelect={(ilot) => console.log('Selected îlot:', ilot)}
+                    onCorridorSelect={(corridor) => console.log('Selected corridor:', corridor)}
                   />
                 ) : (
                   <FloorPlan3DViewer
-                    floorPlan={floorPlanData.floorPlan}
                     rooms={floorPlanData.rooms || []}
-                    measurements={floorPlanData.measurements || []}
-                    className="w-full h-full"
+                    className="w-full h-[600px]"
                   />
                 )}
               </div>

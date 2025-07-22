@@ -31,7 +31,7 @@ interface Props {
   className?: string;
 }
 
-export function ThreeDFloorPlanViewer({ rooms, className }: Props) {
+export function FloorPlan3DViewer({ rooms, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [rotation, setRotation] = useState({ x: -30, y: 45, z: 0 });
   const [zoom, setZoom] = useState(1);

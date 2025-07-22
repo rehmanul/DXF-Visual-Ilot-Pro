@@ -6,6 +6,7 @@ import { cadProcessor } from "./services/cadProcessor";
 import { roomDetectionService } from "./services/roomDetection";
 import { exportService, type ExportOptions } from "./services/exportService";
 import { AIRoomLabelingService } from "./services/aiRoomLabeling";
+import { ilotPlacementService } from "./services/ilotPlacement";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
@@ -213,6 +214,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('AI labeling error:', error);
       res.status(500).json({ error: "AI labeling failed" });
+    }
+  });
+
+  // Generate îlot placement and corridor network
+  app.post("/api/floor-plans/:id/generate-ilots", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { corridorWidth = 1.2, targetDensity = 0.6 } = req.body;
+
+      const floorPlan = await storage.getFloorPlan(id);
+      if (!floorPlan) {
+        return res.status(404).json({ error: "Floor plan not found" });
+      }
+
+      if (!floorPlan.geometryData) {
+        return res.status(400).json({ error: "No geometry data available for îlot placement" });
+      }
+
+      // Generate îlot layout
+      const layout = await ilotPlacementService.generateFloorPlanLayout(
+        floorPlan.geometryData as any,
+        corridorWidth,
+        targetDensity
+      );
+
+      // Update floor plan with îlot data
+      await storage.updateFloorPlan(id, {
+        ilotLayout: layout,
+        totalIlots: layout.ilots.length,
+        totalCorridors: layout.corridors.length,
+        spaceEfficiency: layout.efficiencyRatio
+      });
+
+      res.json({
+        success: true,
+        layout,
+        summary: {
+          totalIlots: layout.ilots.length,
+          totalCorridors: layout.corridors.length,
+          totalUsableArea: layout.totalUsableArea,
+          totalIlotArea: layout.totalIlotArea,
+          totalCorridorArea: layout.totalCorridorArea,
+          efficiencyRatio: layout.efficiencyRatio
+        }
+      });
+    } catch (error) {
+      console.error('Îlot placement error:', error);
+      res.status(500).json({ error: "Îlot placement generation failed" });
     }
   });
 
