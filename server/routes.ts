@@ -270,23 +270,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 // Background processing function
-async function processCADFile(floorPlanId: number, filePath: string, originalName: string, io: any): Promise<void> {
-  try {
-    // Update status to processing
-    await storage.updateFloorPlan(floorPlanId, { status: "processing" });
+async function processCADFile(floorPlanId: number, filePath: string, originalName: string, io: any) {
+  const startTime = Date.now();
 
-    // Determine file type and process accordingly
+  try {
+    console.log(`[Processing] Starting CAD file processing for plan ${floorPlanId}: ${originalName}`);
+
+    // Update status to processing
+    await storage.updateFloorPlan(floorPlanId, { 
+      status: "processing",
+      processedAt: new Date()
+    });
+
+    if (io) {
+      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 10, message: 'Starting file processing...' });
+    }
+
+    // Determine file type
     const ext = path.extname(originalName).toLowerCase();
+    console.log(`[Processing] File type detected: ${ext}`);
+
+    // Get file size for timeout estimation
+    const stats = await fs.stat(filePath);
+    const fileSizeMB = stats.size / (1024 * 1024);
+    console.log(`[Processing] File size: ${fileSizeMB.toFixed(2)} MB`);
+
+    if (io) {
+      io.emit('processing-update', { 
+        floorPlanId, 
+        status: 'processing', 
+        progress: 20, 
+        message: `Processing ${ext.toUpperCase()} file (${fileSizeMB.toFixed(1)} MB)...` 
+      });
+    }
+
+    // Process the CAD file
     let geometryData;
+
 
     switch (ext) {
       case '.dxf':
+        if (io) {
+          io.emit('processing-update', { floorPlanId, status: 'processing', progress: 30, message: 'Parsing DXF entities...' });
+        }
         geometryData = await cadProcessor.processDXF(filePath);
         break;
       case '.dwg':
+        if (io) {
+          io.emit('processing-update', { floorPlanId, status: 'processing', progress: 30, message: 'Parsing DWG file...' });
+        }
         geometryData = await cadProcessor.processDWG(filePath);
         break;
       case '.pdf':
+        if (io) {
+          io.emit('processing-update', { floorPlanId, status: 'processing', progress: 30, message: 'Converting PDF and extracting geometry...' });
+        }
         geometryData = await cadProcessor.processPDF(filePath);
         break;
       default:

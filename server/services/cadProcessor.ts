@@ -37,34 +37,53 @@ export class CADProcessor {
     return new Promise((resolve, reject) => {
       const scriptPath = path.join(process.cwd(), 'scripts', 'cad_processor.py');
       
+      // Set timeout based on file type (PDF files need more time for image processing)
+      const timeout = fileType === 'pdf' ? 120000 : 60000; // 2 minutes for PDF, 1 minute for others
+      
       const pythonProcess = spawn('python3', [
         scriptPath,
         fileType,
         filePath
       ], {
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: timeout
       });
 
       let output = '';
       let error = '';
+      let timeoutHandle: NodeJS.Timeout;
+
+      // Set up timeout handler
+      timeoutHandle = setTimeout(() => {
+        pythonProcess.kill('SIGKILL');
+        reject(new Error(`Processing timed out after ${timeout/1000} seconds. File may be too large or complex.`));
+      }, timeout);
 
       pythonProcess.stdout.on('data', (data) => {
         output += data.toString();
+        console.log(`[CAD Processor] Processing ${fileType} file: ${data.toString().trim()}`);
       });
 
       pythonProcess.stderr.on('data', (data) => {
         error += data.toString();
+        console.error(`[CAD Processor] Error: ${data.toString().trim()}`);
       });
 
       pythonProcess.on('close', (code) => {
+        clearTimeout(timeoutHandle);
+        
         if (code !== 0) {
-          reject(new Error(`Python process failed with code ${code}: ${error}`));
+          const errorMsg = error.includes('timeout') 
+            ? `Processing timed out. File may be too large or complex.`
+            : `Python process failed with code ${code}: ${error}`;
+          reject(new Error(errorMsg));
         } else {
           try {
             const result = JSON.parse(output);
             if (result.error) {
               reject(new Error(result.error));
             } else {
+              console.log(`[CAD Processor] Successfully processed ${fileType} file: ${result.entity_count || 0} entities`);
               resolve(result);
             }
           } catch (parseError) {
@@ -74,6 +93,7 @@ export class CADProcessor {
       });
 
       pythonProcess.on('error', (err) => {
+        clearTimeout(timeoutHandle);
         reject(new Error(`Failed to start Python process: ${err.message}`));
       });
     });

@@ -45,16 +45,26 @@ class CADProcessor:
             raise ImportError("ezdxf library is required for DXF processing")
 
         try:
+            print("Loading DXF file...", flush=True)
+            
             # Try to load the DXF file, use recover if needed
             try:
                 doc = ezdxf.readfile(file_path)
+                print("DXF file loaded successfully", flush=True)
             except ezdxf.DXFStructureError:
+                print("DXF file has structure errors, attempting recovery...", flush=True)
                 doc, auditor = recover.readfile(file_path)
                 if auditor.has_errors:
-                    print(f"DXF file has errors but recovered: {len(auditor.errors)} errors", file=sys.stderr)
+                    print(f"DXF file has errors but recovered: {len(auditor.errors)} errors", file=sys.stderr, flush=True)
 
             # Get the model space
             msp = doc.modelspace()
+            
+            # Count total entities for progress reporting
+            total_entities = len(list(msp)) + sum(len(list(block)) for block in doc.blocks if not block.name.startswith('*'))
+            processed_count = 0
+            
+            print(f"Processing {total_entities} entities...", flush=True)
             
             # Process blocks first
             for block in doc.blocks:
@@ -63,20 +73,37 @@ class CADProcessor:
                     self.blocks[block_name] = []
                     for entity in block:
                         self._process_entity(entity, is_block=True)
+                        processed_count += 1
+                        
+                        # Report progress every 100 entities
+                        if processed_count % 100 == 0:
+                            progress = (processed_count / total_entities) * 100
+                            print(f"Progress: {progress:.1f}% ({processed_count}/{total_entities})", flush=True)
             
             # Extract entities from model space
             for entity in msp:
                 self._process_entity(entity)
+                processed_count += 1
+                
+                # Report progress every 100 entities
+                if processed_count % 100 == 0:
+                    progress = (processed_count / total_entities) * 100
+                    print(f"Progress: {progress:.1f}% ({processed_count}/{total_entities})", flush=True)
 
+            print("Calculating bounds and finalizing...", flush=True)
+            
             # Calculate bounds
             self._calculate_bounds()
             
             # Detect units from DXF header
             self._detect_units(doc)
+            
+            print("DXF processing completed successfully", flush=True)
 
             return self._build_result()
 
         except Exception as e:
+            print(f"Error during DXF processing: {str(e)}", file=sys.stderr, flush=True)
             raise Exception(f"Failed to process DXF file: {str(e)}")
 
     def process_dwg(self, file_path: str) -> Dict[str, Any]:
