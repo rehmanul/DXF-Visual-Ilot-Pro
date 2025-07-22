@@ -28,6 +28,7 @@ import {
   Clock,
   Database
 } from "lucide-react";
+import { io, Socket } from 'socket.io-client';
 
 export default function Home() {
   const { id } = useParams<{ id: string }>();
@@ -36,7 +37,44 @@ export default function Home() {
     id ? parseInt(id) : null
   );
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingMessage, setProcessingMessage] = useState('');
+  const [socket, setSocket] = useState<Socket | null>(null);
   const queryClient = useQueryClient();
+
+  // Setup WebSocket connection
+  React.useEffect(() => {
+    const newSocket = io('/', {
+      transports: ['websocket', 'polling']
+    });
+
+    newSocket.on('processing-update', (data) => {
+      if (data.floorPlanId === selectedFloorPlanId) {
+        setProcessingProgress(data.progress);
+        setProcessingMessage(data.message);
+      }
+    });
+
+    newSocket.on('processing-complete', (data) => {
+      if (data.floorPlanId === selectedFloorPlanId) {
+        queryClient.invalidateQueries({ queryKey: ['/api/floor-plans', selectedFloorPlanId] });
+        setProcessingProgress(100);
+        setProcessingMessage('Processing complete!');
+      }
+    });
+
+    newSocket.on('processing-error', (data) => {
+      if (data.floorPlanId === selectedFloorPlanId) {
+        setProcessingMessage(`Error: ${data.error}`);
+      }
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.close();
+    };
+  }, [selectedFloorPlanId, queryClient]);
 
   // Query for floor plan details
   const { data: floorPlanData, isLoading: isLoadingPlan } = useQuery<ProcessingResult>({
@@ -142,15 +180,15 @@ export default function Home() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Processing CAD File...</span>
-                      <span className="text-sm text-primary">{(statusData as any)?.progress || 50}%</span>
+                      <span className="text-sm text-primary">{processingProgress}%</span>
                     </div>
-                    <Progress value={(statusData as any)?.progress || 50} className="h-2" />
+                    <Progress value={processingProgress} className="h-2" />
                     <div className="flex items-center text-sm text-gray-600">
                       <Clock className="w-4 h-4 mr-2" />
                       <span>
-                        {(statusData as any)?.progress < 30 ? 'Extracting geometric data...' :
-                         (statusData as any)?.progress < 70 ? 'Detecting rooms and measurements...' :
-                         'Finalizing AI analysis...'}
+                        {processingMessage || (processingProgress < 30 ? 'Extracting geometric data...' :
+                         processingProgress < 70 ? 'Detecting rooms and measurements...' :
+                         'Finalizing AI analysis...')}
                       </span>
                     </div>
                   </div>

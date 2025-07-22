@@ -19,7 +19,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['.dxf', '.dwg', '.pdf'];
     const ext = path.extname(file.originalname).toLowerCase();
-    
+
     if (allowedTypes.includes(ext)) {
       cb(null, true);
     } else {
@@ -29,10 +29,10 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
+
   // Initialize AI service
   const aiLabelingService = new AIRoomLabelingService();
-  
+
   // Get all floor plans
   app.get("/api/floor-plans", async (req, res) => {
     try {
@@ -48,14 +48,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const floorPlan = await storage.getFloorPlan(id);
-      
+
       if (!floorPlan) {
         return res.status(404).json({ error: "Floor plan not found" });
       }
 
       const rooms = await storage.getRoomsByFloorPlan(id);
       const measurements = await storage.getMeasurementsByFloorPlan(id);
-      
+
       res.json({
         floorPlan,
         rooms,
@@ -82,15 +82,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "processing"
       });
 
-      // Start background processing
-      processCADFile(floorPlan.id, req.file.path, req.file.originalname)
-        .catch(error => {
-          console.error(`Processing failed for file ${floorPlan.id}:`, error);
-          storage.updateFloorPlan(floorPlan.id, {
-            status: "error",
-            errorMessage: error.message
-          });
+      // Start background processing (non-blocking)
+      const io = req.app.get('io');
+      processCADFile(floorPlan.id, req.file.path, req.file.originalname, io).catch(error => {
+        console.error('Background processing failed:', error);
+        storage.updateFloorPlan(floorPlan.id, { 
+          status: "error", 
+          errorMessage: error.message 
         });
+        if (io) {
+          io.emit('processing-error', { floorPlanId: floorPlan.id, error: error.message });
+        }
+      });
 
       res.json({ floorPlan });
     } catch (error) {
@@ -103,7 +106,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const floorPlan = await storage.getFloorPlan(id);
-      
+
       if (!floorPlan) {
         return res.status(404).json({ error: "Floor plan not found" });
       }
@@ -123,7 +126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const { format, options } = req.body;
-      
+
       const floorPlan = await storage.getFloorPlan(id);
       if (!floorPlan) {
         return res.status(404).json({ error: "Floor plan not found" });
@@ -142,19 +145,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           mimeType = 'application/pdf';
           filename = `${floorPlan.originalName.split('.')[0]}_analysis.pdf`;
           break;
-        
+
         case 'excel':
           buffer = await exportService.exportToExcel(floorPlan, rooms, measurements);
           mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
           filename = `${floorPlan.originalName.split('.')[0]}_data.xlsx`;
           break;
-        
+
         case 'cad':
           buffer = await exportService.exportToCAD(floorPlan, floorPlan.geometryData);
           mimeType = 'application/dxf';
           filename = `${floorPlan.originalName.split('.')[0]}_processed.dxf`;
           break;
-        
+
         case 'png':
           if (!req.body.canvasData) {
             return res.status(400).json({ error: "Canvas data required for PNG export" });
@@ -163,7 +166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           mimeType = 'image/png';
           filename = `${floorPlan.originalName.split('.')[0]}_floorplan.png`;
           break;
-        
+
         default:
           return res.status(400).json({ error: "Invalid export format" });
       }
@@ -180,28 +183,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/floor-plans/:id/ai-label", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Get floor plan and rooms
       const floorPlan = await storage.getFloorPlan(id);
       if (!floorPlan) {
         return res.status(404).json({ error: "Floor plan not found" });
       }
-      
+
       const rooms = await storage.getRoomsByFloorPlan(id);
-      
+
       if (!floorPlan.geometryData || Object.keys(floorPlan.geometryData).length === 0) {
         return res.status(400).json({ error: "No geometry data available for AI analysis" });
       }
-      
+
       // Run AI analysis
       const roomAnalyses = await aiLabelingService.labelRooms(rooms, floorPlan.geometryData as any);
-      
+
       // Update room labels based on AI analysis
       const updatedRooms = await aiLabelingService.updateRoomLabels(rooms, roomAnalyses);
-      
+
       // Update rooms in storage (if we had update functionality)
       // For now, just return the analysis results
-      
+
       res.json({ 
         success: true,
         analyses: roomAnalyses,
@@ -218,7 +221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 // Background processing function
-async function processCADFile(floorPlanId: number, filePath: string, originalName: string): Promise<void> {
+async function processCADFile(floorPlanId: number, filePath: string, originalName: string, io: any): Promise<void> {
   try {
     // Update status to processing
     await storage.updateFloorPlan(floorPlanId, { status: "processing" });
@@ -316,14 +319,14 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
       status: "error",
       errorMessage: error instanceof Error ? error.message : "Unknown error"
     });
-    
+
     // Clean up uploaded file on error
     try {
       await fs.unlink(filePath);
     } catch (cleanupError) {
       console.error("Failed to cleanup file:", cleanupError);
     }
-    
+
     throw error;
   }
 }
