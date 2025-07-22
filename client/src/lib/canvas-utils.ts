@@ -179,13 +179,13 @@ function drawMeasurements(ctx: CanvasRenderingContext2D, measurements: Measureme
       
       // Draw measurement line
       ctx.beginPath();
-      ctx.moveTo(measurement.startX, measurement.startY);
-      ctx.lineTo(measurement.endX, measurement.endY);
+      ctx.moveTo(measurement.startX || 0, measurement.startY || 0);
+      ctx.lineTo(measurement.endX || 0, measurement.endY || 0);
       ctx.stroke();
       
       // Draw measurement text
-      const midX = (measurement.startX + measurement.endX) / 2;
-      const midY = (measurement.startY + measurement.endY) / 2;
+      const midX = ((measurement.startX || 0) + (measurement.endX || 0)) / 2;
+      const midY = ((measurement.startY || 0) + (measurement.endY || 0)) / 2;
       
       if (measurement.label) {
         ctx.fillText(measurement.label, midX, midY - 5);

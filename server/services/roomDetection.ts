@@ -22,7 +22,17 @@ export class RoomDetectionService {
     // Real implementation would use computer vision or geometric analysis
     // This would analyze walls, openings, and enclosed spaces
     
-    const rooms = [];
+    const rooms: Array<{
+      id: string;
+      name: string;
+      type: string;
+      area: number;
+      dimensions: any;
+      shape: string;
+      color: string;
+      boundaries: number[][];
+      bounds: any;
+    }> = [];
     const roomColors = ['#FF6B35', '#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444', '#6B7280'];
     
     // Extract wall entities to find enclosed spaces
@@ -59,7 +69,7 @@ export class RoomDetectionService {
     // Implement space detection algorithm
     // This is a simplified version - real implementation would be more sophisticated
     
-    const spaces = [];
+    const spaces: Array<{ boundaries: number[][] }> = [];
     const gridSize = 50; // Simplified grid-based approach
     
     // For demonstration, create some basic rectangular spaces based on wall patterns

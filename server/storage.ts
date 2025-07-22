@@ -40,6 +40,7 @@ export class MemStorage implements IStorage {
       id,
       uploadedAt: new Date(),
       processedAt: null,
+      status: insertFloorPlan.status || "uploading",
     };
     this.floorPlans.set(id, floorPlan);
     return floorPlan;
@@ -69,6 +70,9 @@ export class MemStorage implements IStorage {
     const room: Room = {
       ...insertRoom,
       id,
+      width: insertRoom.width || null,
+      height: insertRoom.height || null,
+      shape: insertRoom.shape || null,
     };
     this.rooms.set(id, room);
     return room;
@@ -83,6 +87,8 @@ export class MemStorage implements IStorage {
     const measurement: Measurement = {
       ...insertMeasurement,
       id,
+      label: insertMeasurement.label || null,
+      unit: insertMeasurement.unit || "mm",
     };
     this.measurements.set(id, measurement);
     return measurement;

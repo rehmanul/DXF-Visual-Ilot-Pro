@@ -5,6 +5,7 @@ import { insertFloorPlanSchema, insertRoomSchema, insertMeasurementSchema } from
 import { cadProcessor } from "./services/cadProcessor";
 import { roomDetectionService } from "./services/roomDetection";
 import { exportService, type ExportOptions } from "./services/exportService";
+import { AIRoomLabelingService } from "./services/aiRoomLabeling";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
@@ -28,6 +29,9 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  
+  // Initialize AI service
+  const aiLabelingService = new AIRoomLabelingService();
   
   // Get all floor plans
   app.get("/api/floor-plans", async (req, res) => {
@@ -169,6 +173,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(buffer);
     } catch (error) {
       res.status(500).json({ error: "Export failed" });
+    }
+  });
+
+  // AI room labeling
+  app.post("/api/floor-plans/:id/ai-label", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Get floor plan and rooms
+      const floorPlan = await storage.getFloorPlan(id);
+      if (!floorPlan) {
+        return res.status(404).json({ error: "Floor plan not found" });
+      }
+      
+      const rooms = await storage.getRoomsByFloorPlan(id);
+      
+      if (!floorPlan.geometryData || Object.keys(floorPlan.geometryData).length === 0) {
+        return res.status(400).json({ error: "No geometry data available for AI analysis" });
+      }
+      
+      // Run AI analysis
+      const roomAnalyses = await aiLabelingService.labelRooms(rooms, floorPlan.geometryData as any);
+      
+      // Update room labels based on AI analysis
+      const updatedRooms = await aiLabelingService.updateRoomLabels(rooms, roomAnalyses);
+      
+      // Update rooms in storage (if we had update functionality)
+      // For now, just return the analysis results
+      
+      res.json({ 
+        success: true,
+        analyses: roomAnalyses,
+        updatedRooms: updatedRooms.length
+      });
+    } catch (error) {
+      console.error('AI labeling error:', error);
+      res.status(500).json({ error: "AI labeling failed" });
     }
   });
 
