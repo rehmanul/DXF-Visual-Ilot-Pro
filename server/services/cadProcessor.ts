@@ -1,13 +1,13 @@
+
 import { GeometryData } from "@shared/schema";
+import { spawn } from 'child_process';
+import path from 'path';
+import fs from 'fs/promises';
 
 export class CADProcessor {
   
   async processDXF(filePath: string): Promise<GeometryData> {
-    // In a real implementation, this would use a Python library like ezdxf or dxfgrabber
-    // For now, we'll create a structured approach that would interface with Python processing
-    
     try {
-      // This would typically spawn a Python process or use a Python bridge
       const result = await this.executePythonProcessor('dxf', filePath);
       return this.parseGeometryData(result);
     } catch (error) {
@@ -17,7 +17,6 @@ export class CADProcessor {
 
   async processDWG(filePath: string): Promise<GeometryData> {
     try {
-      // DWG files would typically be converted to DXF first using Open Design Alliance libraries
       const result = await this.executePythonProcessor('dwg', filePath);
       return this.parseGeometryData(result);
     } catch (error) {
@@ -27,7 +26,6 @@ export class CADProcessor {
 
   async processPDF(filePath: string): Promise<GeometryData> {
     try {
-      // PDF processing would extract vector graphics and convert to geometric entities
       const result = await this.executePythonProcessor('pdf', filePath);
       return this.parseGeometryData(result);
     } catch (error) {
@@ -36,17 +34,16 @@ export class CADProcessor {
   }
 
   private async executePythonProcessor(fileType: string, filePath: string): Promise<any> {
-    // This would execute a Python script that handles the actual CAD file parsing
-    // For the implementation, we'll structure this to work with real Python libraries
-    
-    const { spawn } = await import('child_process');
-    
     return new Promise((resolve, reject) => {
+      const scriptPath = path.join(process.cwd(), 'scripts', 'cad_processor.py');
+      
       const pythonProcess = spawn('python3', [
-        'scripts/cad_processor.py',
+        scriptPath,
         fileType,
         filePath
-      ]);
+      ], {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
 
       let output = '';
       let error = '';
@@ -61,25 +58,39 @@ export class CADProcessor {
 
       pythonProcess.on('close', (code) => {
         if (code !== 0) {
-          reject(new Error(`Python process failed: ${error}`));
+          reject(new Error(`Python process failed with code ${code}: ${error}`));
         } else {
           try {
-            resolve(JSON.parse(output));
+            const result = JSON.parse(output);
+            if (result.error) {
+              reject(new Error(result.error));
+            } else {
+              resolve(result);
+            }
           } catch (parseError) {
-            reject(new Error(`Failed to parse Python output: ${parseError}`));
+            reject(new Error(`Failed to parse Python output: ${parseError}\nOutput: ${output}`));
           }
         }
+      });
+
+      pythonProcess.on('error', (err) => {
+        reject(new Error(`Failed to start Python process: ${err.message}`));
       });
     });
   }
 
   private parseGeometryData(rawData: any): GeometryData {
-    // Parse the output from Python CAD processing
+    if (!rawData || rawData.error) {
+      throw new Error(`Invalid geometry data: ${rawData?.error || 'No data received'}`);
+    }
+
     return {
       entities: rawData.entities || [],
       bounds: rawData.bounds || { minX: 0, minY: 0, maxX: 100, maxY: 100 },
       scale: rawData.scale || 1,
-      units: rawData.units || 'm'
+      units: rawData.units || 'm',
+      layers: rawData.layers || [],
+      blocks: rawData.blocks || {}
     };
   }
 
@@ -97,24 +108,43 @@ export class CADProcessor {
 
     // Extract dimensional information from geometry entities
     for (const entity of geometryData.entities) {
-      if (entity.type === 'DIMENSION') {
+      if (entity.type === 'TEXT' || entity.type === 'MTEXT') {
+        const text = entity.properties?.text || '';
+        const dimensionMatch = text.match(/(\d+(?:\.\d+)?)\s*(mm|cm|m|in|ft|")/i);
+        
+        if (dimensionMatch) {
+          const value = parseFloat(dimensionMatch[1]);
+          const unit = dimensionMatch[2].toLowerCase();
+          
+          measurements.push({
+            type: 'dimension',
+            value: this.convertToMeters(value, unit),
+            unit: 'm',
+            startX: entity.coordinates[0]?.[0],
+            startY: entity.coordinates[0]?.[1],
+            label: text.trim()
+          });
+        }
+      }
+      
+      if (entity.type === 'LINE' && entity.properties?.length) {
         measurements.push({
-          type: 'dimension',
-          value: entity.properties.measurement || 0,
+          type: 'line_length',
+          value: entity.properties.length * geometryData.scale,
           unit: geometryData.units,
           startX: entity.coordinates[0]?.[0],
           startY: entity.coordinates[0]?.[1],
           endX: entity.coordinates[1]?.[0],
           endY: entity.coordinates[1]?.[1],
-          label: entity.properties.text || ''
+          label: `Length: ${(entity.properties.length * geometryData.scale).toFixed(2)}${geometryData.units}`
         });
       }
     }
 
-    // Calculate perimeter and area measurements
+    // Calculate total area and perimeter
     const bounds = geometryData.bounds;
-    const width = bounds.maxX - bounds.minX;
-    const height = bounds.maxY - bounds.minY;
+    const width = (bounds.maxX - bounds.minX) * geometryData.scale;
+    const height = (bounds.maxY - bounds.minY) * geometryData.scale;
 
     measurements.push({
       type: 'total_area',
@@ -127,10 +157,37 @@ export class CADProcessor {
       type: 'perimeter',
       value: 2 * (width + height),
       unit: geometryData.units,
-      label: 'Perimeter'
+      label: 'Building Perimeter'
     });
 
+    // Calculate room areas from closed polylines
+    geometryData.entities
+      .filter(entity => entity.type === 'POLYLINE' && entity.properties?.closed)
+      .forEach((entity, index) => {
+        if (entity.properties?.area) {
+          measurements.push({
+            type: 'room_area',
+            value: entity.properties.area * geometryData.scale * geometryData.scale,
+            unit: geometryData.units + '²',
+            label: `Room ${index + 1} Area`
+          });
+        }
+      });
+
     return measurements;
+  }
+
+  private convertToMeters(value: number, unit: string): number {
+    const conversions: Record<string, number> = {
+      'mm': 0.001,
+      'cm': 0.01,
+      'm': 1.0,
+      'in': 0.0254,
+      'ft': 0.3048,
+      '"': 0.0254
+    };
+    
+    return value * (conversions[unit] || 1.0);
   }
 
   countArchitecturalElements(geometryData: GeometryData): {
@@ -144,15 +201,40 @@ export class CADProcessor {
     for (const entity of geometryData.entities) {
       const layer = entity.layer?.toLowerCase() || '';
       const type = entity.type?.toLowerCase() || '';
-
-      if (layer.includes('door') || type.includes('door')) {
+      
+      // Check for block insertions (common for doors/windows)
+      if (entity.type === 'INSERT' && entity.properties?.block_name) {
+        const blockName = entity.properties.block_name.toLowerCase();
+        
+        if (blockName.includes('door') || layer.includes('door')) {
+          counts.doors++;
+        } else if (blockName.includes('window') || layer.includes('window')) {
+          counts.windows++;
+        } else if (blockName.includes('stair') || layer.includes('stair')) {
+          counts.stairs++;
+        } else if (blockName.includes('column') || layer.includes('column')) {
+          counts.columns++;
+        }
+      }
+      
+      // Check layer names
+      if (layer.includes('door')) {
         counts.doors++;
-      } else if (layer.includes('window') || type.includes('window')) {
+      } else if (layer.includes('window')) {
         counts.windows++;
-      } else if (layer.includes('stair') || type.includes('stair')) {
+      } else if (layer.includes('stair')) {
         counts.stairs++;
-      } else if (layer.includes('column') || type.includes('column')) {
+      } else if (layer.includes('column')) {
         counts.columns++;
+      }
+      
+      // Check for specific geometric patterns
+      if (entity.type === 'ARC' && entity.properties?.start_angle !== undefined) {
+        // Door swing arcs are common indicators
+        const angleSpan = Math.abs((entity.properties.end_angle || 0) - (entity.properties.start_angle || 0));
+        if (angleSpan > 60 && angleSpan < 120) { // Typical door swing
+          counts.doors++;
+        }
       }
     }
 

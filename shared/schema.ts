@@ -12,23 +12,23 @@ export const floorPlans = pgTable("floor_plans", {
   errorMessage: text("error_message"),
   uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
   processedAt: timestamp("processed_at"),
-  
+
   // Extracted data
   totalArea: real("total_area"),
   perimeter: real("perimeter"),
   wallThickness: real("wall_thickness"),
   ceilingHeight: real("ceiling_height"),
-  
+
   // Geometric data
   layers: integer("layers"),
   geometricObjects: integer("geometric_objects"),
-  
+
   // Architectural elements
   doors: integer("doors"),
   windows: integer("windows"),
   stairs: integer("stairs"),
   columns: integer("columns"),
-  
+
   // Processed data as JSON
   geometryData: jsonb("geometry_data"), // Raw geometric data from CAD file
   roomsData: jsonb("rooms_data"), // Room detection results
@@ -45,13 +45,13 @@ export const rooms = pgTable("rooms", {
   height: real("height"),
   shape: text("shape"), // 'rectangular', 'l_shaped', 'irregular', etc.
   color: text("color").notNull(), // Hex color for visualization
-  
+
   // Geometric bounds
   minX: real("min_x").notNull(),
   minY: real("min_y").notNull(),
   maxX: real("max_x").notNull(),
   maxY: real("max_y").notNull(),
-  
+
   // Additional data
   boundaries: jsonb("boundaries"), // Detailed boundary coordinates
 });
@@ -92,12 +92,13 @@ export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
 export type Measurement = typeof measurements.$inferSelect;
 
 // Analysis result types
-export type GeometryData = {
+export interface GeometryData {
   entities: Array<{
     type: string;
     layer: string;
     coordinates: number[][];
     properties: Record<string, any>;
+    is_block?: boolean;
   }>;
   bounds: {
     minX: number;
@@ -107,7 +108,9 @@ export type GeometryData = {
   };
   scale: number;
   units: string;
-};
+  layers: string[];
+  blocks: Record<string, any[]>;
+}
 
 export type RoomDetectionResult = {
   rooms: Array<{
