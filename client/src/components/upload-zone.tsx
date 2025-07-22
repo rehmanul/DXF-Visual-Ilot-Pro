@@ -20,7 +20,17 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
       const formData = new FormData();
       formData.append('file', file);
       
-      const response = await apiRequest('POST', '/api/floor-plans/upload', formData);
+      // Use fetch directly for FormData uploads
+      const response = await fetch('/api/floor-plans/upload', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+      
       return response.json();
     },
     onSuccess: (data) => {
