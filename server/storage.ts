@@ -41,6 +41,24 @@ export class MemStorage implements IStorage {
       uploadedAt: new Date(),
       processedAt: null,
       status: insertFloorPlan.status || "uploading",
+      errorMessage: insertFloorPlan.errorMessage ?? null,
+      totalArea: insertFloorPlan.totalArea ?? null,
+      perimeter: insertFloorPlan.perimeter ?? null,
+      wallThickness: insertFloorPlan.wallThickness ?? null,
+      ceilingHeight: insertFloorPlan.ceilingHeight ?? null,
+      layers: insertFloorPlan.layers ?? null,
+      geometricObjects: insertFloorPlan.geometricObjects ?? null,
+      doors: insertFloorPlan.doors ?? null,
+      windows: insertFloorPlan.windows ?? null,
+      stairs: insertFloorPlan.stairs ?? null,
+      columns: insertFloorPlan.columns ?? null,
+      geometryData: insertFloorPlan.geometryData ?? null,
+      roomsData: insertFloorPlan.roomsData ?? null,
+      measurementsData: insertFloorPlan.measurementsData ?? null,
+      ilotLayout: insertFloorPlan.ilotLayout ?? null,
+      totalIlots: insertFloorPlan.totalIlots ?? null,
+      totalCorridors: insertFloorPlan.totalCorridors ?? null,
+      spaceEfficiency: insertFloorPlan.spaceEfficiency ?? null,
     };
     this.floorPlans.set(id, floorPlan);
     return floorPlan;
@@ -73,6 +91,7 @@ export class MemStorage implements IStorage {
       width: insertRoom.width || null,
       height: insertRoom.height || null,
       shape: insertRoom.shape || null,
+      boundaries: insertRoom.boundaries || null,
     };
     this.rooms.set(id, room);
     return room;
@@ -89,6 +108,11 @@ export class MemStorage implements IStorage {
       id,
       label: insertMeasurement.label || null,
       unit: insertMeasurement.unit || "mm",
+      startX: insertMeasurement.startX || null,
+      startY: insertMeasurement.startY || null,
+      endX: insertMeasurement.endX || null,
+      endY: insertMeasurement.endY || null,
+      annotations: insertMeasurement.annotations || null,
     };
     this.measurements.set(id, measurement);
     return measurement;

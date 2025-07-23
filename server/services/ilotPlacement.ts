@@ -147,7 +147,12 @@ export class IlotPlacementService {
     }
 
     // Fill remaining areas as usable space
-    const usableAreas = this.calculateUsableAreas(bounds, zones);
+    const boundsAsRect: Rectangle = {
+      ...bounds,
+      width: bounds.maxX - bounds.minX,
+      height: bounds.maxY - bounds.minY
+    };
+    const usableAreas = this.calculateUsableAreas(boundsAsRect, zones);
     zones.push(...usableAreas);
 
     return zones;
@@ -307,7 +312,7 @@ export class IlotPlacementService {
 
     for (const sizeInfo of bestCombination) {
       const { size, count } = sizeInfo;
-      const ilotDims = this.ILOT_SIZES[size];
+      const ilotDims = this.ILOT_SIZES[size as keyof typeof this.ILOT_SIZES];
       
       let currentX = zone.minX + this.MIN_CLEARANCE;
       let ilotsInRow = 0;
@@ -332,8 +337,8 @@ export class IlotPlacementService {
             width: ilotDims.width,
             height: ilotDims.height,
             area: ilotDims.area,
-            type: size,
-            color: this.getIlotColor(size),
+            type: size as 'small' | 'medium' | 'large',
+            color: this.getIlotColor(size as 'small' | 'medium' | 'large'),
             label: `${ilotDims.area.toFixed(1)}m²`
           });
         }
@@ -559,7 +564,7 @@ export class IlotPlacementService {
     let estimatedRows = 0;
     
     for (const { size, count } of combination) {
-      const dims = this.ILOT_SIZES[size];
+      const dims = this.ILOT_SIZES[size as keyof typeof this.ILOT_SIZES];
       totalArea += dims.area * count;
       estimatedRows += Math.ceil(count * dims.width / zone.width);
     }
@@ -842,7 +847,7 @@ export class IlotPlacementService {
       endX: maxX,
       endY: maxY,
       width: corridors[0].width,
-      connectedIlots: [...new Set(allIlots)],
+      connectedIlots: Array.from(new Set(allIlots)),
       length: totalLength
     };
   }

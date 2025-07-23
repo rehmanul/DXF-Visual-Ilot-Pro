@@ -33,6 +33,12 @@ export const floorPlans = pgTable("floor_plans", {
   geometryData: jsonb("geometry_data"), // Raw geometric data from CAD file
   roomsData: jsonb("rooms_data"), // Room detection results
   measurementsData: jsonb("measurements_data"), // Extracted measurements
+  
+  // Îlot layout data
+  ilotLayout: jsonb("ilot_layout"), // Generated îlot placement and corridor layout
+  totalIlots: integer("total_ilots"),
+  totalCorridors: integer("total_corridors"),
+  spaceEfficiency: real("space_efficiency")
 });
 
 export const rooms = pgTable("rooms", {

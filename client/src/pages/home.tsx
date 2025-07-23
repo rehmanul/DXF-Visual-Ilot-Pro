@@ -386,7 +386,10 @@ export default function Home() {
                   />
                 ) : (
                   <FloorPlan3DViewer
-                    rooms={floorPlanData.rooms || []}
+                    rooms={floorPlanData.rooms?.map(room => ({
+                      ...room,
+                      boundaries: room.boundaries as number[][] | undefined
+                    })) || []}
                     className="w-full h-[600px]"
                   />
                 )}
@@ -407,7 +410,11 @@ export default function Home() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ExportPanel floorPlanId={selectedFloorPlanId} />
+                <ExportPanel 
+                  floorPlan={floorPlanData.floorPlan}
+                  rooms={floorPlanData.rooms || []}
+                  measurements={floorPlanData.measurements || []}
+                />
               </CardContent>
             </Card>
 
@@ -420,6 +427,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <RoomAnalysis 
+                  floorPlan={floorPlanData.floorPlan}
                   rooms={floorPlanData.rooms || []}
                   measurements={floorPlanData.measurements || []}
                 />
