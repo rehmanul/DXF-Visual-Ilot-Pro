@@ -48,27 +48,44 @@ export default function Home() {
   // Setup WebSocket connection
   React.useEffect(() => {
     const newSocket = io('/', {
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 1000
+    });
+
+    newSocket.on('connect', () => {
+      console.log('WebSocket connected');
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('WebSocket disconnected');
     });
 
     newSocket.on('processing-update', (data) => {
+      console.log('Processing update:', data);
       if (data.floorPlanId === selectedFloorPlanId) {
         setProcessingProgress(data.progress);
-        setProcessingMessage(data.message);
+        setProcessingMessage(data.message || 'Processing...');
       }
     });
 
     newSocket.on('processing-complete', (data) => {
+      console.log('Processing complete:', data);
       if (data.floorPlanId === selectedFloorPlanId) {
         queryClient.invalidateQueries({ queryKey: ['/api/floor-plans', selectedFloorPlanId] });
+        queryClient.invalidateQueries({ queryKey: ['/api/floor-plans', selectedFloorPlanId, 'status'] });
         setProcessingProgress(100);
         setProcessingMessage('Processing complete!');
+        setCurrentStep(3);
       }
     });
 
     newSocket.on('processing-error', (data) => {
+      console.error('Processing error:', data);
       if (data.floorPlanId === selectedFloorPlanId) {
         setProcessingMessage(`Error: ${data.error}`);
+        setProcessingProgress(0);
       }
     });
 
@@ -89,7 +106,11 @@ export default function Home() {
   const { data: statusData } = useQuery({
     queryKey: ['/api/floor-plans', selectedFloorPlanId, 'status'],
     enabled: !!selectedFloorPlanId && floorPlanData?.floorPlan?.status === 'processing',
-    refetchInterval: 2000, // Poll every 2 seconds
+    refetchInterval: (data) => {
+      // Stop polling if processing is complete or failed
+      const status = data?.status;
+      return (status === 'completed' || status === 'error') ? false : 2000;
+    },
   });
 
   useEffect(() => {
@@ -97,13 +118,23 @@ export default function Home() {
       const status = floorPlanData.floorPlan.status;
       if (status === 'completed') {
         setCurrentStep(3);
+        setProcessingProgress(100);
+        setProcessingMessage('Processing complete!');
       } else if (status === 'processing') {
         setCurrentStep(2);
+        if (processingProgress === 0) {
+          setProcessingProgress(10);
+          setProcessingMessage('Starting CAD file processing...');
+        }
+      } else if (status === 'error') {
+        setCurrentStep(2);
+        setProcessingProgress(0);
+        setProcessingMessage(`Processing failed: ${floorPlanData.floorPlan.errorMessage || 'Unknown error'}`);
       } else {
         setCurrentStep(1);
       }
     }
-  }, [floorPlanData]);
+  }, [floorPlanData, processingProgress]);
 
   const handleFloorPlanSelect = (floorPlanId: number) => {
     setSelectedFloorPlanId(floorPlanId);

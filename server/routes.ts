@@ -270,17 +270,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 // Background processing function
-async function processCADFile(floorPlanId: number, filePath: string, originalName: string, io: any) {
-  const startTime = Date.now();
-
+async function processCADFile(floorPlanId: number, filePath: string, originalName: string, io?: any) {
   try {
     console.log(`[Processing] Starting CAD file processing for plan ${floorPlanId}: ${originalName}`);
 
-    // Update status to processing
-    await storage.updateFloorPlan(floorPlanId, { 
-      status: "processing",
-      processedAt: new Date()
-    });
+    // Update status to processing immediately
+    await storage.updateFloorPlan(floorPlanId, { status: "processing" });
 
     if (io) {
       io.emit('processing-update', { floorPlanId, status: 'processing', progress: 10, message: 'Starting file processing...' });
@@ -344,7 +339,11 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
     const totalArea = roomDetection.totalArea;
     const perimeter = measurements.find(m => m.type === 'perimeter')?.value || 0;
 
-    // Update floor plan with extracted data
+    if (io) {
+      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 90, message: 'Finalizing results...' });
+    }
+
+    // Update floor plan with processed data
     await storage.updateFloorPlan(floorPlanId, {
       status: "completed",
       processedAt: new Date(),
@@ -400,12 +399,26 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
     // Clean up uploaded file
     await fs.unlink(filePath);
 
+    console.log(`[Processing] Successfully processed CAD file for plan ${floorPlanId}`);
+
+    if (io) {
+      io.emit('processing-complete', { floorPlanId, status: 'completed', progress: 100 });
+    }
+
   } catch (error) {
+    console.error(`[Processing] Error processing CAD file for plan ${floorPlanId}:`, error);
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown processing error';
+
     // Update status to error
-    await storage.updateFloorPlan(floorPlanId, {
-      status: "error",
-      errorMessage: error instanceof Error ? error.message : "Unknown error"
+    await storage.updateFloorPlan(floorPlanId, { 
+      status: "error", 
+      errorMessage 
     });
+
+    if (io) {
+      io.emit('processing-error', { floorPlanId, error: errorMessage });
+    }
 
     // Clean up uploaded file on error
     try {
@@ -414,7 +427,7 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
       console.error("Failed to cleanup file:", cleanupError);
     }
 
-    throw error;
+    throw error; // Re-throw to be caught by the calling function
   }
 }
 
