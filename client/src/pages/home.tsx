@@ -496,6 +496,7 @@ export default function Home() {
                 </div>
               </CardContent>
             </Card>
+          </div>
         )}
 
         {/* Step 4: Export & Analysis */}
