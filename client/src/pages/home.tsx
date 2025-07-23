@@ -30,16 +30,15 @@ import {
   Database
 } from "lucide-react";
 import { io, Socket } from 'socket.io-client';
+import { Settings, Loader2, Maximize, ArrowRight } from "lucide-react";
 
 export default function Home() {
-  const { id } = useParams<{ id: string }>();
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedFloorPlanId, setSelectedFloorPlanId] = useState<number | null>(
-    id ? parseInt(id) : null
-  );
-  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+  const [selectedFloorPlanId, setSelectedFloorPlanId] = useState<number | null>(null);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processingMessage, setProcessingMessage] = useState('');
+  const [selectedDensity, setSelectedDensity] = useState(25); // Default 25%
+  const [corridorWidth, setCorridorWidth] = useState(1.2); // Default 1.2m
   const [socket, setSocket] = useState<Socket | null>(null);
   const [ilotLayout, setIlotLayout] = useState<any>(null);
   const [isGeneratingIlots, setIsGeneratingIlots] = useState(false);
@@ -375,58 +374,128 @@ export default function Home() {
           </div>
         )}
 
-        {/* Step 3: Visualization */}
-        {currentStep === 3 && selectedFloorPlanId && floorPlanData && (
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <CardTitle className="flex items-center text-xl">
-                  <Eye className="w-6 h-6 mr-3 text-green-600" />
-                  Floor Plan Visualization
-                  <Badge variant="secondary" className="ml-3">Step 3/4</Badge>
+        {/* Step 3: Interactive Visualization & Îlot Placement */}
+        {currentStep === 3 && selectedFloorPlanId && floorPlanData?.floorPlan?.status === 'completed' && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Eye className="w-5 h-5 mr-3 text-green-600" />
+                  Interactive Floor Plan Viewer
+                  <Badge variant="secondary" className="ml-auto">Step 3/4</Badge>
                 </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as '2d' | '3d')}>
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="2d" className="flex items-center gap-2">
-                        <FileText className="w-4 h-4" />
-                        <span className="hidden sm:inline">2D View</span>
-                      </TabsTrigger>
-                      <TabsTrigger value="3d" className="flex items-center gap-2">
-                        <Layers3 className="w-4 h-4" />
-                        <span className="hidden sm:inline">3D View</span>
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                  <Button variant="outline" onClick={() => setCurrentStep(4)}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Export
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg overflow-hidden">
-                {viewMode === '2d' ? (
-                  <AdvancedFloorPlanRenderer
+                <CardDescription>
+                  {!floorPlanData?.floorPlan?.ilotLayout 
+                    ? "Empty floor plan loaded - Configure îlot placement below"
+                    : "Floor plan with îlots and corridors"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {floorPlanData && (
+                  <AdvancedFloorPlanRenderer 
                     floorPlan={floorPlanData.floorPlan}
-                    layout={ilotLayout}
-                    className="w-full"
-                    onIlotSelect={(ilot) => console.log('Selected îlot:', ilot)}
-                    onCorridorSelect={(corridor) => console.log('Selected corridor:', corridor)}
-                  />
-                ) : (
-                  <FloorPlan3DViewer
-                    rooms={floorPlanData.rooms?.map(room => ({
-                      ...room,
-                      boundaries: room.boundaries as number[][] | undefined
-                    })) || []}
-                    className="w-full h-[600px]"
+                    rooms={floorPlanData.rooms}
+                    measurements={floorPlanData.measurements}
                   />
                 )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* Îlot Placement Controls */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Settings className="w-5 h-5 mr-3 text-blue-600" />
+                  Îlot Placement Configuration
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Space Density
+                      </label>
+                      <select 
+                        className="w-full p-2 border rounded-md"
+                        value={selectedDensity}
+                        onChange={(e) => setSelectedDensity(parseInt(e.target.value))}
+                      >
+                        <option value={10}>10% - Minimal</option>
+                        <option value={25}>25% - Light</option>
+                        <option value={30}>30% - Moderate</option>
+                        <option value={35}>35% - Dense</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Corridor Width
+                      </label>
+                      <input
+                        type="number"
+                        className="w-full p-2 border rounded-md"
+                        value={corridorWidth}
+                        onChange={(e) => setCorridorWidth(parseFloat(e.target.value))}
+                        min="0.8"
+                        max="2.0"
+                        step="0.1"
+                        placeholder="1.2"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Default: 1.2m</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handleGenerateIlots}
+                      disabled={isGeneratingIlots}
+                      className="flex-1"
+                    >
+                      {isGeneratingIlots ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating Layout...
+                        </>
+                      ) : (
+                        <>
+                          <Maximize className="w-4 h-4 mr-2" />
+                          Generate Îlots & Corridors
+                        </>
+                      )}
+                    </Button>
+
+                    {floorPlanData?.floorPlan?.ilotLayout && (
+                      <Button 
+                        variant="outline"
+                        onClick={() => setCurrentStep(4)}
+                      >
+                        Continue to Export <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {floorPlanData?.floorPlan?.ilotLayout && (
+                    <div className="mt-4 p-4 bg-green-50 rounded-lg">
+                      <h4 className="font-semibold text-green-800 mb-2">Layout Generated Successfully!</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                        <div>
+                          <span className="text-green-600">Îlots:</span> {floorPlanData.floorPlan.totalIlots}
+                        </div>
+                        <div>
+                          <span className="text-green-600">Corridors:</span> {floorPlanData.floorPlan.totalCorridors}
+                        </div>
+                        <div>
+                          <span className="text-green-600">Efficiency:</span> {floorPlanData.floorPlan.spaceEfficiency?.toFixed(1)}%
+                        </div>
+                        <div>
+                          <span className="text-green-600">Area:</span> {floorPlanData.floorPlan.totalArea?.toFixed(1)}m²
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
         )}
 
         {/* Step 4: Export & Analysis */}

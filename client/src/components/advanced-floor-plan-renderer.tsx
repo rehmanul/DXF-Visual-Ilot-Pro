@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -243,13 +242,13 @@ export function AdvancedFloorPlanRenderer({
   const drawZones = (ctx: CanvasRenderingContext2D, zones: ZoneType[]) => {
     for (const zone of zones) {
       ctx.fillStyle = zone.color;
-      
+
       if (zone.type === 'wall') {
         // Draw walls as thick gray lines/rectangles
         ctx.lineWidth = 0.2; // Wall thickness
         ctx.strokeStyle = COLORS.WALL;
         ctx.fillStyle = COLORS.WALL;
-        
+
         ctx.fillRect(
           zone.bounds.minX,
           zone.bounds.minY,
@@ -265,7 +264,7 @@ export function AdvancedFloorPlanRenderer({
           zone.bounds.width,
           zone.bounds.height
         );
-        
+
         // Add "NO ENTREE" text
         ctx.fillStyle = COLORS.TEXT;
         ctx.font = '0.5px Arial';
@@ -284,7 +283,7 @@ export function AdvancedFloorPlanRenderer({
           zone.bounds.width,
           zone.bounds.height
         );
-        
+
         // Draw door swing arc if available
         if (zone.doorSwing) {
           ctx.strokeStyle = COLORS.ENTRANCE;
@@ -299,7 +298,7 @@ export function AdvancedFloorPlanRenderer({
           );
           ctx.stroke();
         }
-        
+
         // Add entrance text
         ctx.fillStyle = COLORS.TEXT;
         ctx.font = '0.4px Arial';
@@ -316,7 +315,7 @@ export function AdvancedFloorPlanRenderer({
   const drawCorridors = (ctx: CanvasRenderingContext2D, corridors: Corridor[]) => {
     for (const corridor of corridors) {
       const isSelected = selectedCorridor === corridor.id;
-      
+
       // Draw corridor area
       ctx.fillStyle = isSelected ? COLORS.CORRIDOR + 'CC' : COLORS.CORRIDOR + '80';
       ctx.fillRect(
@@ -325,7 +324,7 @@ export function AdvancedFloorPlanRenderer({
         corridor.endX - corridor.startX,
         corridor.endY - corridor.startY
       );
-      
+
       // Draw corridor outline
       ctx.strokeStyle = isSelected ? COLORS.CORRIDOR_LINE : COLORS.CORRIDOR_LINE + '80';
       ctx.lineWidth = isSelected ? 0.15 : 0.1;
@@ -335,7 +334,7 @@ export function AdvancedFloorPlanRenderer({
         corridor.endX - corridor.startX,
         corridor.endY - corridor.startY
       );
-      
+
       // Draw width dimension
       if (showMeasurements) {
         ctx.fillStyle = COLORS.TEXT;
@@ -353,16 +352,16 @@ export function AdvancedFloorPlanRenderer({
   const drawIlots = (ctx: CanvasRenderingContext2D, ilots: Ilot[]) => {
     for (const ilot of ilots) {
       const isSelected = selectedIlot === ilot.id;
-      
+
       // Draw îlot rectangle
       ctx.fillStyle = isSelected ? ilot.color + 'FF' : ilot.color + 'DD';
       ctx.fillRect(ilot.x, ilot.y, ilot.width, ilot.height);
-      
+
       // Draw îlot outline
       ctx.strokeStyle = isSelected ? COLORS.TEXT : COLORS.CORRIDOR_LINE;
       ctx.lineWidth = isSelected ? 0.15 : 0.08;
       ctx.strokeRect(ilot.x, ilot.y, ilot.width, ilot.height);
-      
+
       // Draw area label
       ctx.fillStyle = COLORS.TEXT;
       ctx.font = '0.25px Arial';
@@ -372,7 +371,7 @@ export function AdvancedFloorPlanRenderer({
         ilot.x + ilot.width / 2,
         ilot.y + ilot.height / 2
       );
-      
+
       // Draw dimensions if selected
       if (isSelected && showMeasurements) {
         ctx.font = '0.2px Arial';
@@ -388,11 +387,11 @@ export function AdvancedFloorPlanRenderer({
   const drawMeasurements = (ctx: CanvasRenderingContext2D, layout: FloorPlanLayout) => {
     // Draw total area information
     const bounds = calculateBounds();
-    
+
     ctx.fillStyle = COLORS.TEXT;
     ctx.font = '0.4px Arial';
     ctx.textAlign = 'left';
-    
+
     const infoY = bounds.maxY - 1;
     ctx.fillText(`Total Area: ${layout.totalUsableArea.toFixed(1)}m²`, bounds.minX, infoY);
     ctx.fillText(`Îlots: ${layout.ilots.length} (${layout.totalIlotArea.toFixed(1)}m²)`, bounds.minX, infoY + 0.5);
@@ -436,11 +435,178 @@ export function AdvancedFloorPlanRenderer({
 
   const exportImage = () => {
     if (!canvasRef.current) return;
-    
+
     const link = document.createElement('a');
     link.download = `floor-plan-${Date.now()}.png`;
     link.href = canvasRef.current.toDataURL();
     link.click();
+  };
+
+  const renderFloorPlan = () => {
+    if (!floorPlan || !canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas with white background
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+
+    // Apply transformations
+    ctx.translate(panOffset.x, panOffset.y);
+    ctx.scale(scale, scale);
+
+    // Set drawing properties for professional CAD appearance
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    try {
+      // STEP 1: Render base floor plan (walls, zones) - Always shown
+      renderBaseFloorPlan(ctx);
+
+      // STEP 2: Render îlots if layout is generated
+      if (floorPlan.ilotLayout?.ilots) {
+        renderIlots(ctx, floorPlan.ilotLayout.ilots);
+      }
+
+      // STEP 3: Render corridors if available
+      if (floorPlan.ilotLayout?.corridors) {
+        renderCorridors(ctx, floorPlan.ilotLayout.corridors);
+      }
+
+      // STEP 4: Render measurements and labels
+      if (floorPlan.ilotLayout?.measurements) {
+        renderMeasurements(ctx, floorPlan.ilotLayout.measurements, floorPlan.ilotLayout.ilots);
+      }
+
+    } catch (error) {
+      console.error('Rendering error:', error);
+    }
+
+    ctx.restore();
+  };
+
+  const renderBaseFloorPlan = (ctx: CanvasRenderingContext2D) => {
+    if (!floorPlan.geometryData?.entities) return;
+
+    floorPlan.geometryData.entities.forEach((entity: any) => {
+      const layer = entity.layer?.toLowerCase() || '';
+
+      // Render walls (MUR) in gray - thick lines
+      if (entity.type === 'LINE' || entity.type === 'POLYLINE' || entity.type === 'LWPOLYLINE') {
+        if (layer.includes('wall') || layer.includes('mur') || layer === '0') {
+          ctx.strokeStyle = '#374151'; // Gray-700
+          ctx.lineWidth = 3 / scale; // Thick walls
+          renderEntityGeometry(ctx, entity);
+        }
+      }
+
+      // Render restricted areas (NO_ENTREE) in blue
+      if (layer.includes('stairs') || layer.includes('elevator') || layer.includes('restricted')) {
+        ctx.fillStyle = '#DBEAFE'; // Blue-50
+        ctx.strokeStyle = '#3B82F6'; // Blue-500
+        ctx.lineWidth = 1 / scale;
+        renderEntityGeometry(ctx, entity, true); // Fill
+      }
+
+      // Render entrances/exits (ENTREE_SORTIE) in red
+      if (layer.includes('door') || layer.includes('entrance') || layer.includes('sortie')) {
+        ctx.fillStyle = '#FEE2E2'; // Red-50
+        ctx.strokeStyle = '#EF4444'; // Red-500
+        ctx.lineWidth = 2 / scale;
+        renderEntityGeometry(ctx, entity, true); // Fill
+      }
+    });
+  };
+
+  const renderIlots = (ctx: CanvasRenderingContext2D, ilots: any[]) => {
+    ilots.forEach(ilot => {
+      // Fill îlot with light pink/red
+      ctx.fillStyle = ilot.color || '#FEE2E2'; // Light pink
+      ctx.fillRect(ilot.x, ilot.y, ilot.width, ilot.height);
+
+      // Draw îlot outline in red
+      ctx.strokeStyle = '#EF4444'; // Red-500
+      ctx.lineWidth = 1.5 / scale;
+      ctx.strokeRect(ilot.x, ilot.y, ilot.width, ilot.height);
+    });
+  };
+
+  const renderCorridors = (ctx: CanvasRenderingContext2D, corridors: any[]) => {
+    corridors.forEach(corridor => {
+      // Draw corridor as pink/red line
+      ctx.strokeStyle = '#F472B6'; // Pink-400
+      ctx.lineWidth = (corridor.width || 1.2) / scale;
+
+      ctx.beginPath();
+      ctx.moveTo(corridor.startX, corridor.startY);
+      ctx.lineTo(corridor.endX, corridor.endY);
+      ctx.stroke();
+    });
+  };
+
+  const renderMeasurements = (ctx: CanvasRenderingContext2D, measurements: any[], ilots: any[]) => {
+    ctx.fillStyle = '#374151'; // Gray-700
+    ctx.font = `${12 / scale}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    measurements.forEach(measurement => {
+      const ilot = ilots.find(i => i.id === measurement.ilotId);
+      if (ilot) {
+        const centerX = ilot.x + ilot.width / 2;
+        const centerY = ilot.y + ilot.height / 2;
+
+        // Draw white background for text
+        const textWidth = ctx.measureText(measurement.label).width;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(centerX - textWidth/2 - 2, centerY - 6, textWidth + 4, 12);
+
+        // Draw text
+        ctx.fillStyle = '#374151';
+        ctx.fillText(measurement.label, centerX, centerY);
+      }
+    });
+  };
+
+  const renderEntityGeometry = (ctx: CanvasRenderingContext2D, entity: any, fill: boolean = false) => {
+    if (!entity.coordinates || entity.coordinates.length === 0) return;
+
+    ctx.beginPath();
+
+    if (entity.type === 'LINE') {
+      if (entity.coordinates.length >= 2) {
+        ctx.moveTo(entity.coordinates[0][0], entity.coordinates[0][1]);
+        ctx.lineTo(entity.coordinates[1][0], entity.coordinates[1][1]);
+      }
+    } else if (entity.type === 'POLYLINE' || entity.type === 'LWPOLYLINE') {
+      if (entity.coordinates.length > 0) {
+        ctx.moveTo(entity.coordinates[0][0], entity.coordinates[0][1]);
+        for (let i = 1; i < entity.coordinates.length; i++) {
+          ctx.lineTo(entity.coordinates[i][0], entity.coordinates[i][1]);
+        }
+        // Close if needed
+        if (entity.properties?.closed) {
+          ctx.closePath();
+        }
+      }
+    } else if (entity.type === 'CIRCLE') {
+      if (entity.coordinates.length > 0 && entity.properties?.radius) {
+        ctx.arc(
+          entity.coordinates[0][0],
+          entity.coordinates[0][1],
+          entity.properties.radius,
+          0,
+          2 * Math.PI
+        );
+      }
+    }
+
+    if (fill) {
+      ctx.fill();
+    }
+    ctx.stroke();
   };
 
   return (
@@ -456,7 +622,7 @@ export function AdvancedFloorPlanRenderer({
               </Badge>
             )}
           </CardTitle>
-          
+
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={resetView}>
               <RotateCcw className="w-4 h-4" />
@@ -473,7 +639,7 @@ export function AdvancedFloorPlanRenderer({
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent>
         {/* Controls */}
         <div className="flex flex-wrap gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
@@ -486,7 +652,7 @@ export function AdvancedFloorPlanRenderer({
             />
             <label htmlFor="showGrid" className="text-sm">Grid</label>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -496,7 +662,7 @@ export function AdvancedFloorPlanRenderer({
             />
             <label htmlFor="showMeasurements" className="text-sm">Measurements</label>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -506,7 +672,7 @@ export function AdvancedFloorPlanRenderer({
             />
             <label htmlFor="showZones" className="text-sm">Zones</label>
           </div>
-          
+
           <div className="flex items-center gap-2 min-w-[200px]">
             <label className="text-sm">Corridor Width:</label>
             <Slider
@@ -532,12 +698,12 @@ export function AdvancedFloorPlanRenderer({
             onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
           />
-          
+
           {/* Zoom indicator */}
           <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
             {(zoom * 100).toFixed(0)}%
           </div>
-          
+
           {/* Legend */}
           <div className="absolute bottom-2 left-2 bg-white bg-opacity-90 p-2 rounded text-xs">
             <div className="grid grid-cols-2 gap-1">
