@@ -311,6 +311,9 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
             io.emit('processing-update', { floorPlanId, status: 'processing', progress: 25, message: 'Parsing DXF entities and layers...' });
           }
           geometryData = await cadProcessor.processDXF(filePath);
+          if (io) {
+            io.emit('processing-update', { floorPlanId, status: 'processing', progress: 45, message: 'DXF parsing completed, analyzing structure...' });
+          }
           break;
         case '.dwg':
           if (io) {
