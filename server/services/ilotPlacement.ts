@@ -505,7 +505,7 @@ export class IlotPlacementService {
     return false;
   }
 
-  private calculateUsableAreas(this: IlotPlacementService, bounds: Rectangle, restrictiveZones: ZoneType[]): ZoneType[] {
+  private calculateUsableAreas(bounds: Rectangle, restrictiveZones: ZoneType[]): ZoneType[] {
     // Simplified: create one large usable area minus restrictions
     // In production, this would use polygon subtraction algorithms
     
@@ -524,7 +524,7 @@ export class IlotPlacementService {
     return [];
   }
 
-  private generateSizeCombinations(this: IlotPlacementService, targetArea: number): Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> {
+  private generateSizeCombinations(targetArea: number): Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> {
     // Generate different combinations of îlot sizes to achieve target area
     const combinations: Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> = [];
     
@@ -555,7 +555,6 @@ export class IlotPlacementService {
   }
 
   private calculatePlacementEfficiency(
-    this: IlotPlacementService,
     zone: Rectangle,
     combination: {size: keyof typeof this.ILOT_SIZES, count: number}[],
     spacing: number

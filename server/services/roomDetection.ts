@@ -178,7 +178,7 @@ export class RoomDetectionService {
     walls.forEach(wall => {
       [wall.start, wall.end].forEach(point => {
         let added = false;
-        for (const [key, points] of intersections) {
+        for (const [key, points] of Array.from(intersections.entries())) {
           const [x, y] = key.split(',').map(Number);
           if (this.calculateDistance([point.x, point.y], [x, y]) < tolerance) {
             points.push(point);
