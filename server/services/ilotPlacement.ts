@@ -526,7 +526,7 @@ export class IlotPlacementService {
 
   private generateSizeCombinations(targetArea: number): Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> {
     // Generate different combinations of îlot sizes to achieve target area
-    const combinations = [];
+    const combinations: Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> = [];
     
     // Combination 1: Mixed sizes (60% small, 30% medium, 10% large)
     const smallCount = Math.floor(targetArea * 0.6 / this.ILOT_SIZES.small.area);
