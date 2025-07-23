@@ -37,8 +37,8 @@ export class CADProcessor {
     return new Promise((resolve, reject) => {
       const scriptPath = path.join(process.cwd(), 'scripts', 'cad_processor.py');
       
-      // Set timeout based on file type (PDF files need more time for image processing)
-      const timeout = fileType === 'pdf' ? 120000 : 60000; // 2 minutes for PDF, 1 minute for others
+      // Set timeout based on file type and size
+      const timeout = fileType === 'pdf' ? 180000 : 90000; // 3 minutes for PDF, 1.5 minutes for others
       
       const pythonProcess = spawn('python3', [
         scriptPath,
@@ -46,60 +46,116 @@ export class CADProcessor {
         filePath
       ], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: timeout
+        detached: false,
+        killSignal: 'SIGTERM'
       });
 
       let output = '';
       let error = '';
+      let isResolved = false;
       let timeoutHandle: NodeJS.Timeout;
+      let lastProgressTime = Date.now();
 
       // Set up timeout handler
       timeoutHandle = setTimeout(() => {
-        pythonProcess.kill('SIGKILL');
-        reject(new Error(`Processing timed out after ${timeout/1000} seconds. File may be too large or complex.`));
+        if (!isResolved) {
+          console.log(`[CAD Processor] Processing timeout after ${timeout/1000}s, terminating process`);
+          pythonProcess.kill('SIGTERM');
+          setTimeout(() => {
+            if (!pythonProcess.killed) {
+              pythonProcess.kill('SIGKILL');
+            }
+          }, 5000);
+          isResolved = true;
+          reject(new Error(`Processing timed out after ${timeout/1000} seconds. The file may be too large or complex.`));
+        }
       }, timeout);
 
+      // Progress tracking timeout - if no output for 30 seconds, consider it stuck
+      const progressTimeout = setInterval(() => {
+        if (Date.now() - lastProgressTime > 30000 && !isResolved) {
+          console.log(`[CAD Processor] No progress for 30s, terminating stuck process`);
+          clearInterval(progressTimeout);
+          clearTimeout(timeoutHandle);
+          pythonProcess.kill('SIGTERM');
+          isResolved = true;
+          reject(new Error('Processing appears to be stuck. Please try with a smaller or simpler file.'));
+        }
+      }, 5000);
+
       pythonProcess.stdout.on('data', (data) => {
+        lastProgressTime = Date.now();
         output += data.toString();
-        console.log(`[CAD Processor] Processing ${fileType} file: ${data.toString().trim()}`);
+        const message = data.toString().trim();
+        if (message) {
+          console.log(`[CAD Processor] ${fileType.toUpperCase()}: ${message}`);
+        }
       });
 
       pythonProcess.stderr.on('data', (data) => {
+        lastProgressTime = Date.now();
         error += data.toString();
-        console.error(`[CAD Processor] Error: ${data.toString().trim()}`);
+        const message = data.toString().trim();
+        if (message && !message.includes('Warning')) {
+          console.error(`[CAD Processor] Error: ${message}`);
+        }
       });
 
-      pythonProcess.on('close', (code) => {
+      pythonProcess.on('close', (code, signal) => {
         clearTimeout(timeoutHandle);
+        clearInterval(progressTimeout);
+        
+        if (isResolved) return;
+        isResolved = true;
+        
+        if (signal === 'SIGTERM' || signal === 'SIGKILL') {
+          reject(new Error('Processing was terminated due to timeout or being stuck.'));
+          return;
+        }
         
         if (code !== 0) {
-          const errorMsg = error.includes('timeout') 
-            ? `Processing timed out. File may be too large or complex.`
-            : `Python process failed with code ${code}: ${error}`;
+          const errorMsg = error.includes('timeout') || error.includes('killed')
+            ? `Processing failed or timed out. Try a smaller file.`
+            : `Processing failed with code ${code}: ${error.substring(0, 500)}`;
           reject(new Error(errorMsg));
         } else {
           try {
-            // For large files, the output might be very long, so we need to handle it carefully
+            if (!output.trim()) {
+              reject(new Error('No output received from processor. File may be corrupted or unsupported.'));
+              return;
+            }
+            
             const result = JSON.parse(output);
             if (result.error) {
               reject(new Error(result.error));
             } else {
-              console.log(`[CAD Processor] Successfully processed ${fileType} file: ${result.entity_count || 0} entities`);
+              console.log(`[CAD Processor] ✅ Successfully processed ${fileType} file: ${result.entity_count || 0} entities`);
               resolve(result);
             }
           } catch (parseError) {
-            // Truncate output for error logging to avoid memory issues
-            const truncatedOutput = output.length > 1000 ? 
-              output.substring(0, 500) + '...[truncated]...' + output.substring(output.length - 500) : 
+            const truncatedOutput = output.length > 500 ? 
+              output.substring(0, 250) + '...[truncated]...' + output.substring(output.length - 250) : 
               output;
-            reject(new Error(`Failed to parse Python output: ${parseError}\nOutput sample: ${truncatedOutput}`));
+            reject(new Error(`Failed to parse processor output: ${parseError}\nOutput: ${truncatedOutput}`));
           }
         }
       });
 
       pythonProcess.on('error', (err) => {
         clearTimeout(timeoutHandle);
-        reject(new Error(`Failed to start Python process: ${err.message}`));
+        clearInterval(progressTimeout);
+        if (!isResolved) {
+          isResolved = true;
+          reject(new Error(`Failed to start Python processor: ${err.message}`));
+        }
+      });
+
+      // Handle process exit
+      pythonProcess.on('exit', (code, signal) => {
+        if (!isResolved && (signal === 'SIGTERM' || signal === 'SIGKILL')) {
+          isResolved = true;
+          reject(new Error('Processing was terminated.'));
+        }
       });
     });
   }

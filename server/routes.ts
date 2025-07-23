@@ -278,7 +278,7 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
     await storage.updateFloorPlan(floorPlanId, { status: "processing" });
 
     if (io) {
-      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 10, message: 'Starting file processing...' });
+      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 5, message: 'Initializing file processing...' });
     }
 
     // Determine file type
@@ -290,47 +290,73 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
     const fileSizeMB = stats.size / (1024 * 1024);
     console.log(`[Processing] File size: ${fileSizeMB.toFixed(2)} MB`);
 
+    // Check file size limits
+    if (fileSizeMB > 25) {
+      throw new Error(`File too large (${fileSizeMB.toFixed(1)} MB). Please use files smaller than 25MB for optimal processing.`);
+    }
+
     if (io) {
       io.emit('processing-update', { 
         floorPlanId, 
         status: 'processing', 
-        progress: 20, 
+        progress: 15, 
         message: `Processing ${ext.toUpperCase()} file (${fileSizeMB.toFixed(1)} MB)...` 
       });
     }
 
-    // Process the CAD file
+    // Process the CAD file with progress tracking
     let geometryData;
+    const processingStartTime = Date.now();
 
+    try {
+      switch (ext) {
+        case '.dxf':
+          if (io) {
+            io.emit('processing-update', { floorPlanId, status: 'processing', progress: 25, message: 'Parsing DXF entities and layers...' });
+          }
+          geometryData = await cadProcessor.processDXF(filePath);
+          break;
+        case '.dwg':
+          if (io) {
+            io.emit('processing-update', { floorPlanId, status: 'processing', progress: 25, message: 'Converting and parsing DWG file...' });
+          }
+          geometryData = await cadProcessor.processDWG(filePath);
+          break;
+        case '.pdf':
+          if (io) {
+            io.emit('processing-update', { floorPlanId, status: 'processing', progress: 25, message: 'Converting PDF and extracting geometry...' });
+          }
+          geometryData = await cadProcessor.processPDF(filePath);
+          break;
+        default:
+          throw new Error(`Unsupported file type: ${ext}`);
+      }
 
-    switch (ext) {
-      case '.dxf':
-        if (io) {
-          io.emit('processing-update', { floorPlanId, status: 'processing', progress: 30, message: 'Parsing DXF entities...' });
-        }
-        geometryData = await cadProcessor.processDXF(filePath);
-        break;
-      case '.dwg':
-        if (io) {
-          io.emit('processing-update', { floorPlanId, status: 'processing', progress: 30, message: 'Parsing DWG file...' });
-        }
-        geometryData = await cadProcessor.processDWG(filePath);
-        break;
-      case '.pdf':
-        if (io) {
-          io.emit('processing-update', { floorPlanId, status: 'processing', progress: 30, message: 'Converting PDF and extracting geometry...' });
-        }
-        geometryData = await cadProcessor.processPDF(filePath);
-        break;
-      default:
-        throw new Error(`Unsupported file type: ${ext}`);
+      const processingTime = ((Date.now() - processingStartTime) / 1000).toFixed(1);
+      console.log(`[Processing] CAD processing completed in ${processingTime}s`);
+
+    } catch (processingError) {
+      console.error(`[Processing] CAD processing failed:`, processingError);
+      throw new Error(`Failed to process ${ext.toUpperCase()} file: ${processingError.message}`);
+    }
+
+    if (io) {
+      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 50, message: 'Analyzing floor plan structure...' });
     }
 
     // Detect rooms
     const roomDetection = await roomDetectionService.detectRooms(geometryData);
 
+    if (io) {
+      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 70, message: 'Extracting measurements and dimensions...' });
+    }
+
     // Extract measurements
     const measurements = await cadProcessor.extractMeasurements(geometryData);
+
+    if (io) {
+      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 80, message: 'Detecting architectural elements...' });
+    }
 
     // Count architectural elements
     const elements = cadProcessor.countArchitecturalElements(geometryData);
@@ -340,7 +366,7 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
     const perimeter = measurements.find(m => m.type === 'perimeter')?.value || 0;
 
     if (io) {
-      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 90, message: 'Finalizing results...' });
+      io.emit('processing-update', { floorPlanId, status: 'processing', progress: 90, message: 'Saving analysis results...' });
     }
 
     // Update floor plan with processed data
