@@ -9,7 +9,7 @@ import { FloorPlan3DViewer } from "@/components/3d-floor-plan-viewer";
 import { AdvancedFloorPlanRenderer } from "@/components/advanced-floor-plan-renderer";
 import ExportPanel from "@/components/export-panel";
 import { ProcessingResult } from "@shared/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
