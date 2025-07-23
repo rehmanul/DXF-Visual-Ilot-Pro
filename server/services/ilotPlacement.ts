@@ -71,7 +71,7 @@ export class IlotPlacementService {
     small: { width: 1.2, height: 0.8, area: 0.96 },
     medium: { width: 1.6, height: 1.2, area: 1.92 },
     large: { width: 2.0, height: 1.6, area: 3.2 }
-  };
+  } as const;
 
   private readonly ZONE_COLORS = {
     wall: '#6B7280',      // Gray
@@ -505,7 +505,7 @@ export class IlotPlacementService {
     return false;
   }
 
-  private calculateUsableAreas(bounds: Rectangle, restrictiveZones: ZoneType[]): ZoneType[] {
+  private calculateUsableAreas(this: IlotPlacementService, bounds: Rectangle, restrictiveZones: ZoneType[]): ZoneType[] {
     // Simplified: create one large usable area minus restrictions
     // In production, this would use polygon subtraction algorithms
     
@@ -524,7 +524,7 @@ export class IlotPlacementService {
     return [];
   }
 
-  private generateSizeCombinations(targetArea: number): Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> {
+  private generateSizeCombinations(this: IlotPlacementService, targetArea: number): Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> {
     // Generate different combinations of îlot sizes to achieve target area
     const combinations: Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> = [];
     
@@ -555,6 +555,7 @@ export class IlotPlacementService {
   }
 
   private calculatePlacementEfficiency(
+    this: IlotPlacementService,
     zone: Rectangle,
     combination: {size: keyof typeof this.ILOT_SIZES, count: number}[],
     spacing: number

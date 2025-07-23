@@ -8,6 +8,15 @@ FloorPlan Processor is a comprehensive web application for uploading, analyzing,
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+- **January 23, 2025**: Completed migration from Replit Agent to Replit environment
+- Successfully fixed TypeScript compilation errors in îlot placement service
+- Implemented advanced CAD processing with AI-powered room detection
+- Added îlot placement and corridor generation functionality  
+- Set up comprehensive export system (PDF, Excel, PNG, CAD)
+- Server running successfully on port 5000
+
 ## System Architecture
 
 ### Frontend Architecture
