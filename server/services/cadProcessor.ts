@@ -79,6 +79,7 @@ export class CADProcessor {
           reject(new Error(errorMsg));
         } else {
           try {
+            // For large files, the output might be very long, so we need to handle it carefully
             const result = JSON.parse(output);
             if (result.error) {
               reject(new Error(result.error));
@@ -87,7 +88,11 @@ export class CADProcessor {
               resolve(result);
             }
           } catch (parseError) {
-            reject(new Error(`Failed to parse Python output: ${parseError}\nOutput: ${output}`));
+            // Truncate output for error logging to avoid memory issues
+            const truncatedOutput = output.length > 1000 ? 
+              output.substring(0, 500) + '...[truncated]...' + output.substring(output.length - 500) : 
+              output;
+            reject(new Error(`Failed to parse Python output: ${parseError}\nOutput sample: ${truncatedOutput}`));
           }
         }
       });
