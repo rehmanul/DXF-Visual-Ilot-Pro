@@ -72,6 +72,18 @@ export class CADProcessor
 
     return stats.size <= maxSize;
   }
+
+  async processImage(filePath: string): Promise<any> {
+    return this.processCADFile(filePath, 'image');
+  }
+
+  async extractMeasurements(filePath: string): Promise<any> {
+    return { measurements: [] };
+  }
+
+  async countArchitecturalElements(filePath: string): Promise<any> {
+    return { count: 0 };
+  }
 }
 
 export const cadProcessor = new CADProcessor();
