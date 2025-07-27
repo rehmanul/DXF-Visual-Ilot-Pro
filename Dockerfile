@@ -1,4 +1,11 @@
-FROM node:18-slim
+FROM node:18-slim AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:18-slim AS production
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -16,8 +23,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
 
-# Copy application files
-COPY dist/ ./dist/
+# Copy built application
+COPY --from=builder /app/dist/ ./dist/
 COPY scripts/ ./scripts/
 
 # Create directories and set permissions
