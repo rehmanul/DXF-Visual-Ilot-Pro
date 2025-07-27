@@ -10,5 +10,5 @@ services:
 
 databases:
   - name: dxf-visual-ilot-pro-db
-    databaseName: dwg_analyzer_pro
+    databaseName: dxf
     user: dxf_user
