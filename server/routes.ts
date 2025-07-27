@@ -7,6 +7,7 @@ import { roomDetectionService } from "./services/roomDetection";
 import { exportService, type ExportOptions } from "./services/exportService";
 import { AIRoomLabelingService } from "./services/aiRoomLabeling";
 import { ilotPlacementService } from "./services/ilotPlacement";
+import apiRoutes from "./routes/api";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
@@ -18,18 +19,21 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024, // 50MB limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['.dxf', '.dwg', '.pdf'];
+    const allowedTypes = ['.dxf', '.dwg', '.pdf', '.jpg', '.jpeg', '.png'];
     const ext = path.extname(file.originalname).toLowerCase();
 
     if (allowedTypes.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only DXF, DWG, and PDF files are allowed.'));
+      cb(new Error('Invalid file type. Only DXF, DWG, PDF, and image files (JPG, PNG) are allowed.'));
     }
   }
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+
+  // Register API routes
+  app.use('/api', apiRoutes);
 
   // Initialize AI service
   const aiLabelingService = new AIRoomLabelingService();
@@ -271,6 +275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 // Background processing function
 async function processCADFile(floorPlanId: number, filePath: string, originalName: string, io: any) {
+console.log("processCADFile called");
   const startTime = Date.now();
 
   try {
@@ -327,6 +332,14 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
         }
         geometryData = await cadProcessor.processPDF(filePath);
         break;
+      case '.jpg':
+      case '.jpeg':
+      case '.png':
+        if (io) {
+          io.emit('processing-update', { floorPlanId, status: 'processing', progress: 30, message: 'Processing image and extracting floor plan...' });
+        }
+        geometryData = await cadProcessor.processImage(filePath);
+        break;
       default:
         throw new Error(`Unsupported file type: ${ext}`);
     }
@@ -338,11 +351,11 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
     const measurements = await cadProcessor.extractMeasurements(geometryData);
 
     // Count architectural elements
-    const elements = cadProcessor.countArchitecturalElements(geometryData);
+      const elements = await cadProcessor.countArchitecturalElements(geometryData);
 
-    // Calculate totals
-    const totalArea = roomDetection.totalArea;
-    const perimeter = measurements.find(m => m.type === 'perimeter')?.value || 0;
+      // Calculate totals
+      const totalArea = roomDetection.totalArea;
+      const perimeter = measurements.find(m => m.type === 'perimeter')?.value || 0;
 
     // Update floor plan with extracted data
     await storage.updateFloorPlan(floorPlanId, {
@@ -398,7 +411,12 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
     }
 
     // Clean up uploaded file
-    await fs.unlink(filePath);
+    try {
+      await fs.access(filePath);
+      await fs.unlink(filePath);
+    } catch (cleanupError) {
+      // File doesn't exist or already deleted, ignore
+    }
 
   } catch (error) {
     // Update status to error
@@ -409,9 +427,10 @@ async function processCADFile(floorPlanId: number, filePath: string, originalNam
 
     // Clean up uploaded file on error
     try {
+      await fs.access(filePath);
       await fs.unlink(filePath);
     } catch (cleanupError) {
-      console.error("Failed to cleanup file:", cleanupError);
+      // File doesn't exist or already deleted, ignore
     }
 
     throw error;

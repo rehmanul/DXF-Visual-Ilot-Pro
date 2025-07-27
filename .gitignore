@@ -4,3 +4,9 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+.env.local
+.env.production.local
+uploads/*
+!uploads/.gitkeep
+*.log
+python_script_output.log

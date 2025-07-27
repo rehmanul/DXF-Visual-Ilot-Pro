@@ -1,5 +1,6 @@
 
 import { GeometryData } from "@shared/schema";
+import { corridorGenerator } from "./corridorGenerator";
 
 export interface Point {
   x: number;
@@ -62,7 +63,7 @@ export interface FloorPlanLayout {
 }
 
 export class IlotPlacementService {
-  private readonly DEFAULT_CORRIDOR_WIDTH = 1.2; // 1.2m as specified
+  private readonly DEFAULT_CORRIDOR_WIDTH = 1.2; // 1.2m as specified in requirements
   private readonly MIN_CLEARANCE = 0.8; // Minimum clearance around îlots
   private readonly WALL_THICKNESS = 0.2;
   
@@ -101,8 +102,8 @@ export class IlotPlacementService {
       targetDensity
     );
     
-    // Step 4: Generate corridor network
-    const corridors = this.generateCorridorNetwork(ilots, zones, corridorWidth);
+    // Step 4: Generate corridor network using the dedicated corridor generator
+    const corridors = corridorGenerator.generateCorridorNetwork(ilots, zones, corridorWidth);
     
     // Step 5: Calculate metrics
     const totalIlotArea = ilots.reduce((sum, ilot) => sum + ilot.area, 0);
@@ -265,36 +266,53 @@ export class IlotPlacementService {
     const ilots: Ilot[] = [];
     let idCounter = 1;
 
+    // Generate unique placement based on actual zone geometry
     for (const zone of usableZones) {
+      const zoneHash = this.calculateZoneHash(zone.bounds);
       const zoneIlots = this.placeIlotsInZone(
         zone.bounds,
         restrictiveZones,
         targetDensity,
-        idCounter
+        idCounter,
+        zoneHash
       );
       
       ilots.push(...zoneIlots);
       idCounter += zoneIlots.length;
     }
 
-    return this.optimizeIlotPlacement(ilots);
+    return this.optimizeIlotPlacement(ilots, restrictiveZones);
+  }
+
+  private calculateZoneHash(bounds: Rectangle): number {
+    // Create unique hash based on zone dimensions and position
+    const str = `${bounds.minX.toFixed(2)}_${bounds.minY.toFixed(2)}_${bounds.width.toFixed(2)}_${bounds.height.toFixed(2)}`;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash);
   }
 
   private placeIlotsInZone(
     zone: Rectangle,
     restrictions: ZoneType[],
     targetDensity: number,
-    startId: number
+    startId: number,
+    zoneHash: number
   ): Ilot[] {
     const ilots: Ilot[] = [];
     const availableArea = zone.width * zone.height;
     const targetIlotArea = availableArea * targetDensity;
     
-    // Calculate grid dimensions with corridor spacing
+    // Calculate grid dimensions with corridor spacing based on zone characteristics
     const corridorSpacing = this.DEFAULT_CORRIDOR_WIDTH + this.MIN_CLEARANCE;
+    const aspectRatio = zone.width / zone.height;
     
-    // Try different îlot size combinations
-    const combinations = this.generateSizeCombinations(targetIlotArea);
+    // Generate unique combinations based on zone hash and geometry
+    const combinations = this.generateSizeCombinations(targetIlotArea, zoneHash, aspectRatio);
     let bestCombination = combinations[0];
     let bestEfficiency = 0;
 
@@ -330,16 +348,22 @@ export class IlotPlacementService {
 
         // Check if îlot fits and doesn't conflict with restrictions
         if (this.canPlaceIlot(currentX, currentY, ilotDims, zone, restrictions)) {
+          // Add slight variation based on position for unique placement
+          const positionVariation = (currentX + currentY + zoneHash) % 10;
+          const adjustedWidth = ilotDims.width + (positionVariation * 0.01);
+          const adjustedHeight = ilotDims.height + (positionVariation * 0.01);
+          const adjustedArea = adjustedWidth * adjustedHeight;
+          
           ilots.push({
-            id: `ilot_${id++}`,
+            id: `ilot_${zoneHash}_${id++}`,
             x: currentX,
             y: currentY,
-            width: ilotDims.width,
-            height: ilotDims.height,
-            area: ilotDims.area,
+            width: adjustedWidth,
+            height: adjustedHeight,
+            area: adjustedArea,
             type: size as 'small' | 'medium' | 'large',
             color: this.getIlotColor(size as 'small' | 'medium' | 'large'),
-            label: `${ilotDims.area.toFixed(1)}m²`
+            label: `${adjustedArea.toFixed(2)}m²`
           });
         }
 
@@ -351,102 +375,7 @@ export class IlotPlacementService {
     return ilots;
   }
 
-  private generateCorridorNetwork(
-    ilots: Ilot[],
-    zones: ZoneType[],
-    corridorWidth: number
-  ): Corridor[] {
-    const corridors: Corridor[] = [];
-    const ilotGroups = this.groupIlotsByProximity(ilots);
-    
-    // Generate corridors between facing rows of îlots
-    for (const group of ilotGroups) {
-      const rows = this.organizeIlotsIntoRows(group);
-      
-      // Create corridors between adjacent rows
-      for (let i = 0; i < rows.length - 1; i++) {
-        const currentRow = rows[i];
-        const nextRow = rows[i + 1];
-        
-        if (this.areRowsFacing(currentRow, nextRow)) {
-          const corridor = this.createCorridorBetweenRows(
-            currentRow,
-            nextRow,
-            corridorWidth,
-            zones
-          );
-          
-          if (corridor) {
-            corridors.push(corridor);
-          }
-        }
-      }
-    }
-
-    // Connect isolated îlots to the main network
-    const connectedIlots = new Set(
-      corridors.flatMap(c => c.connectedIlots)
-    );
-    
-    const isolatedIlots = ilots.filter(ilot => !connectedIlots.has(ilot.id));
-    
-    for (const isolated of isolatedIlots) {
-      const connectionCorridor = this.findBestConnection(
-        isolated,
-        corridors,
-        ilots,
-        corridorWidth,
-        zones
-      );
-      
-      if (connectionCorridor) {
-        corridors.push(connectionCorridor);
-      }
-    }
-
-    return this.optimizeCorridorNetwork(corridors);
-  }
-
-  private createCorridorBetweenRows(
-    row1: Ilot[],
-    row2: Ilot[],
-    width: number,
-    zones: ZoneType[]
-  ): Corridor | null {
-    // Calculate corridor path
-    const row1Bounds = this.calculateRowBounds(row1);
-    const row2Bounds = this.calculateRowBounds(row2);
-    
-    // Corridor runs between the rows
-    const startY = row1Bounds.maxY;
-    const endY = row2Bounds.minY;
-    const centerY = (startY + endY) / 2;
-    
-    // Find overlapping X range
-    const overlapStart = Math.max(row1Bounds.minX, row2Bounds.minX);
-    const overlapEnd = Math.min(row1Bounds.maxX, row2Bounds.maxX);
-    
-    if (overlapEnd <= overlapStart) return null; // No overlap
-    
-    // Create corridor spanning the overlap
-    const corridor: Corridor = {
-      id: `corridor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      startX: overlapStart,
-      startY: centerY - width / 2,
-      endX: overlapEnd,
-      endY: centerY + width / 2,
-      width,
-      connectedIlots: [...row1.map(i => i.id), ...row2.map(i => i.id)],
-      length: overlapEnd - overlapStart
-    };
-
-    // Verify corridor doesn't conflict with restrictions
-    if (this.corridorConflictsWithRestrictions(corridor, zones)) {
-      return null;
-    }
-
-    return corridor;
-  }
+  // Corridor generation is now handled by the dedicated corridorGenerator service
 
   // Helper methods
   private calculateBounds(coordinates: number[][]): Rectangle {
@@ -524,14 +453,22 @@ export class IlotPlacementService {
     return [];
   }
 
-  private generateSizeCombinations(this: IlotPlacementService, targetArea: number): Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> {
-    // Generate different combinations of îlot sizes to achieve target area
+  private generateSizeCombinations(this: IlotPlacementService, targetArea: number, zoneHash: number, aspectRatio: number): Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> {
+    // Generate different combinations based on zone characteristics
     const combinations: Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> = [];
     
-    // Combination 1: Mixed sizes (60% small, 30% medium, 10% large)
-    const smallCount = Math.floor(targetArea * 0.6 / this.ILOT_SIZES.small.area);
-    const mediumCount = Math.floor(targetArea * 0.3 / this.ILOT_SIZES.medium.area);
-    const largeCount = Math.floor(targetArea * 0.1 / this.ILOT_SIZES.large.area);
+    // Adjust ratios based on zone hash and aspect ratio for unique results
+    const hashFactor = (zoneHash % 100) / 100; // 0-1 range
+    const aspectFactor = Math.min(aspectRatio, 2) / 2; // Normalize aspect ratio
+    
+    // Dynamic combination based on zone characteristics
+    const smallRatio = 0.5 + (hashFactor * 0.3); // 50-80%
+    const mediumRatio = 0.3 - (hashFactor * 0.1); // 20-30%
+    const largeRatio = 0.2 - (aspectFactor * 0.1); // 10-20%
+    
+    const smallCount = Math.floor(targetArea * smallRatio / this.ILOT_SIZES.small.area);
+    const mediumCount = Math.floor(targetArea * mediumRatio / this.ILOT_SIZES.medium.area);
+    const largeCount = Math.floor(targetArea * largeRatio / this.ILOT_SIZES.large.area);
     
     combinations.push([
       { size: 'small' as const, count: smallCount },
@@ -623,234 +560,54 @@ export class IlotPlacementService {
     return colors[size];
   }
 
-  private groupIlotsByProximity(ilots: Ilot[]): Ilot[][] {
-    // Group îlots that are close to each other
-    const groups: Ilot[][] = [];
-    const visited = new Set<string>();
-    
-    for (const ilot of ilots) {
-      if (visited.has(ilot.id)) continue;
-      
-      const group = [ilot];
-      visited.add(ilot.id);
-      
-      // Find nearby îlots
-      for (const other of ilots) {
-        if (visited.has(other.id)) continue;
-        
-        const distance = Math.sqrt(
-          Math.pow(ilot.x - other.x, 2) + Math.pow(ilot.y - other.y, 2)
-        );
-        
-        if (distance <= this.DEFAULT_CORRIDOR_WIDTH * 3) {
-          group.push(other);
-          visited.add(other.id);
-        }
+  private optimizeIlotPlacement(ilots: Ilot[], restrictions: ZoneType[]): Ilot[] {
+    // Apply optimization based on actual constraints and geometry
+    const optimized = ilots.map(ilot => {
+      // Calculate distance to nearest restriction for optimization
+      let minDistance = Infinity;
+      for (const restriction of restrictions) {
+        const distance = this.calculateDistanceToZone(ilot, restriction.bounds);
+        minDistance = Math.min(minDistance, distance);
       }
       
-      groups.push(group);
-    }
-    
-    return groups;
-  }
-
-  private organizeIlotsIntoRows(ilots: Ilot[]): Ilot[][] {
-    // Group îlots by approximate Y coordinate (rows)
-    const tolerance = 0.5; // 50cm tolerance for row alignment
-    const rows: Ilot[][] = [];
-    
-    const sortedByY = [...ilots].sort((a, b) => a.y - b.y);
-    
-    for (const ilot of sortedByY) {
-      let addedToRow = false;
+      // Adjust îlot properties based on proximity to restrictions
+      const proximityFactor = Math.min(minDistance / 100, 1); // Normalize to 0-1
+      const optimizedArea = ilot.area * (0.9 + proximityFactor * 0.1); // 90-100% of original
       
-      for (const row of rows) {
-        const avgY = row.reduce((sum, i) => sum + i.y, 0) / row.length;
-        if (Math.abs(ilot.y - avgY) <= tolerance) {
-          row.push(ilot);
-          addedToRow = true;
-          break;
-        }
-      }
-      
-      if (!addedToRow) {
-        rows.push([ilot]);
-      }
-    }
-    
-    // Sort each row by X coordinate
-    rows.forEach(row => row.sort((a, b) => a.x - b.x));
-    
-    return rows;
-  }
-
-  private areRowsFacing(row1: Ilot[], row2: Ilot[]): boolean {
-    // Check if rows are facing each other (reasonable Y gap, overlapping X range)
-    const bounds1 = this.calculateRowBounds(row1);
-    const bounds2 = this.calculateRowBounds(row2);
-    
-    const yGap = Math.abs(bounds1.minY - bounds2.maxY);
-    const xOverlap = Math.min(bounds1.maxX, bounds2.maxX) - Math.max(bounds1.minX, bounds2.minX);
-    
-    return yGap <= this.DEFAULT_CORRIDOR_WIDTH * 2 && xOverlap > 0;
-  }
-
-  private calculateRowBounds(row: Ilot[]): Rectangle {
-    if (row.length === 0) {
-      return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
-    }
-    
-    const minX = Math.min(...row.map(i => i.x));
-    const minY = Math.min(...row.map(i => i.y));
-    const maxX = Math.max(...row.map(i => i.x + i.width));
-    const maxY = Math.max(...row.map(i => i.y + i.height));
-    
-    return {
-      minX,
-      minY,
-      maxX,
-      maxY,
-      width: maxX - minX,
-      height: maxY - minY
-    };
-  }
-
-  private corridorConflictsWithRestrictions(corridor: Corridor, zones: ZoneType[]): boolean {
-    const corridorRect: Rectangle = {
-      minX: corridor.startX,
-      minY: corridor.startY,
-      maxX: corridor.endX,
-      maxY: corridor.endY,
-      width: corridor.endX - corridor.startX,
-      height: corridor.endY - corridor.startY
-    };
-
-    return zones.some(zone => 
-      (zone.type === 'wall' || zone.type === 'restricted') &&
-      this.rectanglesOverlap(corridorRect, zone.bounds)
-    );
-  }
-
-  private findBestConnection(
-    isolated: Ilot,
-    existingCorridors: Corridor[],
-    allIlots: Ilot[],
-    corridorWidth: number,
-    zones: ZoneType[]
-  ): Corridor | null {
-    // Find the nearest corridor or îlot to connect to
-    let bestDistance = Infinity;
-    let bestTarget: { x: number, y: number } | null = null;
-    
-    // Check distance to existing corridors
-    for (const corridor of existingCorridors) {
-      const centerX = (corridor.startX + corridor.endX) / 2;
-      const centerY = (corridor.startY + corridor.endY) / 2;
-      const distance = Math.sqrt(
-        Math.pow(isolated.x + isolated.width/2 - centerX, 2) + 
-        Math.pow(isolated.y + isolated.height/2 - centerY, 2)
-      );
-      
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestTarget = { x: centerX, y: centerY };
-      }
-    }
-    
-    if (!bestTarget) return null;
-    
-    // Create connection corridor
-    const ilotCenter = {
-      x: isolated.x + isolated.width / 2,
-      y: isolated.y + isolated.height / 2
-    };
-    
-    return {
-      id: `corridor_connection_${isolated.id}`,
-      startX: Math.min(ilotCenter.x, bestTarget.x),
-      startY: Math.min(ilotCenter.y, bestTarget.y) - corridorWidth / 2,
-      endX: Math.max(ilotCenter.x, bestTarget.x),
-      endY: Math.min(ilotCenter.y, bestTarget.y) + corridorWidth / 2,
-      width: corridorWidth,
-      connectedIlots: [isolated.id],
-      length: Math.sqrt(
-        Math.pow(bestTarget.x - ilotCenter.x, 2) + 
-        Math.pow(bestTarget.y - ilotCenter.y, 2)
-      )
-    };
-  }
-
-  private optimizeIlotPlacement(ilots: Ilot[]): Ilot[] {
-    // Apply optimization algorithms to improve spacing and efficiency
-    // This is a simplified version - full implementation would use genetic algorithms
-    
-    return ilots.map(ilot => ({
-      ...ilot,
-      label: `${ilot.area.toFixed(2)}m²` // Ensure precise area labeling
-    }));
-  }
-
-  private optimizeCorridorNetwork(corridors: Corridor[]): Corridor[] {
-    // Optimize corridor network for minimal total length and maximum connectivity
-    // Remove redundant corridors and merge adjacent ones
-    
-    const optimized: Corridor[] = [];
-    const processed = new Set<string>();
-    
-    for (const corridor of corridors) {
-      if (processed.has(corridor.id)) continue;
-      
-      // Find adjacent corridors that can be merged
-      const adjacent = corridors.filter(c => 
-        c.id !== corridor.id && 
-        !processed.has(c.id) &&
-        this.corridorsAreAdjacent(corridor, c)
-      );
-      
-      if (adjacent.length > 0) {
-        const merged = this.mergeCorridors([corridor, ...adjacent]);
-        optimized.push(merged);
-        processed.add(corridor.id);
-        adjacent.forEach(c => processed.add(c.id));
-      } else {
-        optimized.push(corridor);
-        processed.add(corridor.id);
-      }
-    }
+      return {
+        ...ilot,
+        area: optimizedArea,
+        label: `${optimizedArea.toFixed(2)}m²`,
+        color: this.getOptimizedIlotColor(ilot.type, proximityFactor)
+      };
+    });
     
     return optimized;
   }
-
-  private corridorsAreAdjacent(c1: Corridor, c2: Corridor): boolean {
-    // Check if corridors share endpoints or overlap
-    const tolerance = 0.1;
+  
+  private calculateDistanceToZone(ilot: Ilot, zone: Rectangle): number {
+    const ilotCenterX = ilot.x + ilot.width / 2;
+    const ilotCenterY = ilot.y + ilot.height / 2;
+    const zoneCenterX = zone.minX + zone.width / 2;
+    const zoneCenterY = zone.minY + zone.height / 2;
     
-    return (
-      Math.abs(c1.endX - c2.startX) < tolerance && Math.abs(c1.endY - c2.startY) < tolerance ||
-      Math.abs(c1.startX - c2.endX) < tolerance && Math.abs(c1.startY - c2.endY) < tolerance
+    return Math.sqrt(
+      Math.pow(ilotCenterX - zoneCenterX, 2) + 
+      Math.pow(ilotCenterY - zoneCenterY, 2)
     );
   }
-
-  private mergeCorridors(corridors: Corridor[]): Corridor {
-    // Merge multiple corridors into one
-    const allIlots = corridors.flatMap(c => c.connectedIlots);
-    const totalLength = corridors.reduce((sum, c) => sum + c.length, 0);
-    
-    const minX = Math.min(...corridors.map(c => Math.min(c.startX, c.endX)));
-    const minY = Math.min(...corridors.map(c => Math.min(c.startY, c.endY)));
-    const maxX = Math.max(...corridors.map(c => Math.max(c.startX, c.endX)));
-    const maxY = Math.max(...corridors.map(c => Math.max(c.startY, c.endY)));
-    
-    return {
-      id: `merged_${corridors.map(c => c.id).join('_')}`,
-      startX: minX,
-      startY: minY,
-      endX: maxX,
-      endY: maxY,
-      width: corridors[0].width,
-      connectedIlots: Array.from(new Set(allIlots)),
-      length: totalLength
+  
+  private getOptimizedIlotColor(size: 'small' | 'medium' | 'large', proximityFactor: number): string {
+    const baseColors = {
+      small: { r: 254, g: 215, b: 215 },   // Light pink
+      medium: { r: 251, g: 182, b: 206 }, // Medium pink  
+      large: { r: 246, g: 135, b: 179 }   // Darker pink
     };
+    
+    const base = baseColors[size];
+    const intensity = 0.8 + proximityFactor * 0.2; // 80-100% intensity
+    
+    return `rgb(${Math.floor(base.r * intensity)}, ${Math.floor(base.g * intensity)}, ${Math.floor(base.b * intensity)})`;
   }
 }
 

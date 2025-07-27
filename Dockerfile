@@ -1,32 +1,30 @@
-FROM node:20-slim
-
-# Install Python and system dependencies for CAD processing
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    && rm -rf /var/lib/apt/lists/*
+FROM node:18-alpine AS builder
 
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
 RUN npm ci --only=production
 
-# Copy source code
 COPY . .
-
-# Install Python dependencies
-RUN python3 -m pip install --break-system-packages ezdxf pdf2image opencv-python numpy Pillow
-
-# Build the application
 RUN npm run build
 
-# Create uploads directory
-RUN mkdir -p uploads
+FROM python:3.9-slim AS python-deps
+RUN pip install --no-cache-dir ezdxf>=1.0.0 pdf2image>=1.16.0 opencv-python>=4.8.0 numpy>=1.24.0 Pillow>=10.0.0
 
-# Expose port
-EXPOSE 5000
+FROM node:18-alpine AS production
 
-# Start the application
-CMD ["npm", "start"]
+RUN apk add --no-cache python3 py3-pip
+COPY --from=python-deps /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY scripts/ ./scripts/
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN mkdir -p uploads exports && chown -R nodejs:nodejs uploads exports
+
+USER nodejs
+EXPOSE 3001
+
+CMD ["node", "dist/index.js"]

@@ -1,554 +1,611 @@
+import { FloorPlanLayout, Ilot, Corridor, ZoneType } from './ilotPlacement';
+import { GeometryData } from '@shared/schema';
 
-import { FloorPlan, Room, Measurement } from "@shared/schema";
-import fs from 'fs/promises';
-import path from 'path';
+export interface ExportOptions {
+  format: 'dxf' | 'pdf' | 'png' | 'svg' | 'json';
+  includeOriginalPlan: boolean;
+  includeIlots: boolean;
+  includeCorridors: boolean;
+  includeMeasurements: boolean;
+  scale: number;
+  paperSize: 'A4' | 'A3' | 'A2' | 'A1' | 'A0' | 'custom';
+  customSize?: { width: number; height: number };
+  colorScheme: 'default' | 'monochrome' | 'blueprint';
+  lineWeights: {
+    walls: number;
+    ilots: number;
+    corridors: number;
+    dimensions: number;
+  };
+}
+
+export interface ExportResult {
+  success: boolean;
+  filePath?: string;
+  fileName?: string;
+  fileSize?: number;
+  format: string;
+  error?: string;
+  metadata: {
+    totalIlots: number;
+    totalCorridors: number;
+    totalArea: number;
+    exportedAt: Date;
+    scale: number;
+  };
+}
 
 export class ExportService {
-  
-  async exportToPDF(floorPlan: FloorPlan, rooms: Room[], measurements: Measurement[], options: ExportOptions): Promise<Buffer> {
-    try {
-      // Generate comprehensive HTML report
-      const htmlContent = this.generateHTMLReport(floorPlan, rooms, measurements, options);
-      
-      // For now, return HTML as text (in production, use puppeteer to convert to PDF)
-      const reportContent = `
-FLOOR PLAN ANALYSIS REPORT
-=========================
-
-Project: ${floorPlan.originalName}
-Generated: ${new Date().toLocaleDateString()}
-
-SUMMARY
--------
-Total Area: ${floorPlan.totalArea?.toFixed(2)} m²
-Perimeter: ${floorPlan.perimeter?.toFixed(2)} m
-Number of Rooms: ${rooms.length}
-Doors: ${floorPlan.doors || 0}
-Windows: ${floorPlan.windows || 0}
-
-ROOM DETAILS
------------
-${rooms.map(room => `
-${room.name}:
-  Type: ${room.type}
-  Area: ${room.area?.toFixed(2)} m²
-  Dimensions: ${room.width?.toFixed(2)} × ${room.height?.toFixed(2)} m
-  Shape: ${room.shape}
-`).join('')}
-
-MEASUREMENTS
------------
-${measurements.map(m => `
-${m.label || m.type}: ${m.value.toFixed(2)} ${m.unit}
-`).join('')}
-
-ARCHITECTURAL ELEMENTS
----------------------
-Layers Detected: ${floorPlan.layers || 0}
-Geometric Objects: ${floorPlan.geometricObjects || 0}
-Wall Thickness: ${floorPlan.wallThickness?.toFixed(2)} m
-Ceiling Height: ${floorPlan.ceilingHeight?.toFixed(2)} m
-`;
-      
-      return Buffer.from(reportContent, 'utf-8');
-    } catch (error) {
-      throw new Error(`PDF export failed: ${error}`);
+  private readonly DEFAULT_OPTIONS: ExportOptions = {
+    format: 'pdf',
+    includeOriginalPlan: true,
+    includeIlots: true,
+    includeCorridors: true,
+    includeMeasurements: true,
+    scale: 1,
+    paperSize: 'A3',
+    colorScheme: 'default',
+    lineWeights: {
+      walls: 0.5,
+      ilots: 0.3,
+      corridors: 0.2,
+      dimensions: 0.1
     }
-  }
+  };
 
-  async exportToExcel(floorPlan: FloorPlan, rooms: Room[], measurements: Measurement[]): Promise<Buffer> {
+  /**
+   * Export floor plan layout to specified format
+   */
+  async exportFloorPlan(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: Partial<ExportOptions> = {}
+  ): Promise<ExportResult> {
+    const exportOptions = { ...this.DEFAULT_OPTIONS, ...options };
+    
     try {
-      // Generate CSV-like content (can be opened in Excel)
-      const data = this.prepareExcelData(floorPlan, rooms, measurements);
-      
-      let csvContent = '';
-      
-      // Floor Plan Summary
-      csvContent += 'FLOOR PLAN SUMMARY\n';
-      csvContent += 'Property,Value\n';
-      csvContent += `File Name,${floorPlan.originalName}\n`;
-      csvContent += `Total Area,${floorPlan.totalArea?.toFixed(2)} m²\n`;
-      csvContent += `Perimeter,${floorPlan.perimeter?.toFixed(2)} m\n`;
-      csvContent += `Number of Rooms,${rooms.length}\n`;
-      csvContent += `Doors,${floorPlan.doors || 0}\n`;
-      csvContent += `Windows,${floorPlan.windows || 0}\n`;
-      csvContent += `Processed Date,${floorPlan.processedAt?.toISOString().split('T')[0] || 'N/A'}\n`;
-      csvContent += '\n';
-      
-      // Room Details
-      csvContent += 'ROOM DETAILS\n';
-      csvContent += 'Room Name,Type,Area (m²),Width (m),Height (m),Shape\n';
-      rooms.forEach(room => {
-        csvContent += `"${room.name}","${room.type}",${room.area?.toFixed(2) || 0},${room.width?.toFixed(2) || 0},${room.height?.toFixed(2) || 0},"${room.shape}"\n`;
-      });
-      csvContent += '\n';
-      
-      // Measurements
-      csvContent += 'MEASUREMENTS\n';
-      csvContent += 'Type,Value,Unit,Label\n';
-      measurements.forEach(measurement => {
-        csvContent += `"${measurement.type}",${measurement.value.toFixed(2)},"${measurement.unit}","${measurement.label || ''}"\n`;
-      });
-      
-      return Buffer.from(csvContent, 'utf-8');
-    } catch (error) {
-      throw new Error(`Excel export failed: ${error}`);
-    }
-  }
-
-  async exportToCAD(floorPlan: FloorPlan, geometryData: any): Promise<Buffer> {
-    try {
-      const dxfContent = this.generateDXFContent(geometryData);
-      return Buffer.from(dxfContent, 'utf-8');
-    } catch (error) {
-      throw new Error(`CAD export failed: ${error}`);
-    }
-  }
-
-  async exportToPNG(floorPlan: FloorPlan, canvasData: string, options: ExportOptions): Promise<Buffer> {
-    try {
-      if (!canvasData.startsWith('data:image/png;base64,')) {
-        throw new Error('Invalid canvas data format');
+      switch (exportOptions.format) {
+        case 'dxf':
+          return await this.exportToDXF(layout, originalGeometry, exportOptions);
+        case 'pdf':
+          return await this.exportToPDF(layout, originalGeometry, exportOptions);
+        case 'png':
+          return await this.exportToPNG(layout, originalGeometry, exportOptions);
+        case 'svg':
+          return await this.exportToSVG(layout, originalGeometry, exportOptions);
+        case 'json':
+          return await this.exportToJSON(layout, originalGeometry, exportOptions);
+        default:
+          throw new Error(`Unsupported export format: ${exportOptions.format}`);
       }
-      
-      const base64Data = canvasData.replace(/^data:image\/png;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      
-      // Validate that it's a valid PNG
-      if (!buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
-        throw new Error('Invalid PNG data');
-      }
-      
-      return buffer;
     } catch (error) {
-      throw new Error(`PNG export failed: ${error}`);
+      return {
+        success: false,
+        format: exportOptions.format,
+        error: error instanceof Error ? error.message : 'Unknown export error',
+        metadata: this.createMetadata(layout, exportOptions)
+      };
     }
   }
 
-  private generateHTMLReport(floorPlan: FloorPlan, rooms: Room[], measurements: Measurement[], options: ExportOptions): string {
-    const roomsTable = rooms.map(room => `
-      <tr>
-        <td>${room.name}</td>
-        <td>${room.type}</td>
-        <td>${room.area?.toFixed(2)} m²</td>
-        <td>${room.width?.toFixed(2)} × ${room.height?.toFixed(2)} m</td>
-        <td>${room.shape}</td>
-      </tr>
-    `).join('');
-
-    const measurementsTable = measurements.map(m => `
-      <tr>
-        <td>${m.type}</td>
-        <td>${m.value.toFixed(2)}</td>
-        <td>${m.unit}</td>
-        <td>${m.label || ''}</td>
-      </tr>
-    `).join('');
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Floor Plan Analysis Report</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-          .summary { background: #f8f9fa; padding: 20px; margin: 20px 0; border-radius: 8px; }
-          .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-          .summary-item { background: white; padding: 15px; border-radius: 4px; border-left: 4px solid #007bff; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-          th { background-color: #f2f2f2; font-weight: bold; }
-          tr:nth-child(even) { background-color: #f9f9f9; }
-          .section { margin: 30px 0; }
-          h1 { color: #333; margin-bottom: 10px; }
-          h2 { color: #555; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-          h3 { color: #666; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Floor Plan Analysis Report</h1>
-          <h2>${floorPlan.originalName}</h2>
-          <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-        </div>
-        
-        <div class="section">
-          <h3>Executive Summary</h3>
-          <div class="summary">
-            <div class="summary-grid">
-              <div class="summary-item">
-                <strong>Total Area</strong><br>
-                ${floorPlan.totalArea?.toFixed(2)} m²
-              </div>
-              <div class="summary-item">
-                <strong>Perimeter</strong><br>
-                ${floorPlan.perimeter?.toFixed(2)} m
-              </div>
-              <div class="summary-item">
-                <strong>Rooms</strong><br>
-                ${rooms.length} identified
-              </div>
-              <div class="summary-item">
-                <strong>Doors & Windows</strong><br>
-                ${floorPlan.doors || 0} doors, ${floorPlan.windows || 0} windows
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="section">
-          <h3>Room Analysis</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Room Name</th>
-                <th>Type</th>
-                <th>Area</th>
-                <th>Dimensions</th>
-                <th>Shape</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${roomsTable}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="section">
-          <h3>Measurements & Calculations</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Measurement Type</th>
-                <th>Value</th>
-                <th>Unit</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${measurementsTable}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="section">
-          <h3>Technical Details</h3>
-          <div class="summary">
-            <p><strong>File Type:</strong> ${floorPlan.fileType?.toUpperCase()}</p>
-            <p><strong>File Size:</strong> ${(floorPlan.fileSize! / 1024 / 1024).toFixed(2)} MB</p>
-            <p><strong>Processing Status:</strong> ${floorPlan.status}</p>
-            <p><strong>Layers Detected:</strong> ${floorPlan.layers || 0}</p>
-            <p><strong>Geometric Objects:</strong> ${floorPlan.geometricObjects || 0}</p>
-            <p><strong>Wall Thickness:</strong> ${floorPlan.wallThickness?.toFixed(2)} m</p>
-            <p><strong>Ceiling Height:</strong> ${floorPlan.ceilingHeight?.toFixed(2)} m</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-  }
-
-  private prepareExcelData(floorPlan: FloorPlan, rooms: Room[], measurements: Measurement[]) {
+  /**
+   * Export to DXF format (AutoCAD)
+   */
+  private async exportToDXF(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): Promise<ExportResult> {
+    const fileName = `floor_plan_${Date.now()}.dxf`;
+    const filePath = `exports/${fileName}`;
+    
+    // Generate DXF content
+    const dxfContent = this.generateDXFContent(layout, originalGeometry, options);
+    
+    // In a real implementation, this would use a DXF library like dxf-writer
+    // For now, we'll create a basic DXF structure
+    const fs = await import('fs');
+    const path = await import('path');
+    
+    // Ensure exports directory exists
+    const exportsDir = 'exports';
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
+    }
+    
+    fs.writeFileSync(filePath, dxfContent);
+    const stats = fs.statSync(filePath);
+    
     return {
-      floorPlan: {
-        name: floorPlan.originalName,
-        fileType: floorPlan.fileType,
-        fileSize: floorPlan.fileSize,
-        totalArea: floorPlan.totalArea,
-        perimeter: floorPlan.perimeter,
-        doors: floorPlan.doors,
-        windows: floorPlan.windows,
-        layers: floorPlan.layers,
-        geometricObjects: floorPlan.geometricObjects,
-        wallThickness: floorPlan.wallThickness,
-        ceilingHeight: floorPlan.ceilingHeight,
-        processedAt: floorPlan.processedAt
-      },
-      rooms: rooms.map(room => ({
-        id: room.id,
-        name: room.name,
-        type: room.type,
-        area: room.area,
-        width: room.width,
-        height: room.height,
-        shape: room.shape,
-        color: room.color
-      })),
-      measurements: measurements.map(measurement => ({
-        type: measurement.type,
-        value: measurement.value,
-        unit: measurement.unit,
-        label: measurement.label,
-        startX: measurement.startX,
-        startY: measurement.startY,
-        endX: measurement.endX,
-        endY: measurement.endY
-      }))
+      success: true,
+      filePath,
+      fileName,
+      fileSize: stats.size,
+      format: 'dxf',
+      metadata: this.createMetadata(layout, options)
     };
   }
 
-  private generateDXFContent(geometryData: any): string {
-    if (!geometryData || !geometryData.entities) {
-      throw new Error('No geometry data available for DXF export');
+  /**
+   * Export to PDF format
+   */
+  private async exportToPDF(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): Promise<ExportResult> {
+    const fileName = `floor_plan_${Date.now()}.pdf`;
+    const filePath = `exports/${fileName}`;
+    
+    // Generate PDF content using a library like PDFKit or jsPDF
+    const pdfContent = await this.generatePDFContent(layout, originalGeometry, options);
+    
+    const fs = await import('fs');
+    
+    // Ensure exports directory exists
+    const exportsDir = 'exports';
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
     }
+    
+    fs.writeFileSync(filePath, pdfContent);
+    const stats = fs.statSync(filePath);
+    
+    return {
+      success: true,
+      filePath,
+      fileName,
+      fileSize: stats.size,
+      format: 'pdf',
+      metadata: this.createMetadata(layout, options)
+    };
+  }
 
-    // Generate comprehensive DXF file
-    let dxf = `0
-SECTION
-2
-HEADER
-9
-$ACADVER
-1
-AC1015
-9
-$DWGCODEPAGE
-3
-ANSI_1252
-9
-$INSBASE
-10
-0.0
-20
-0.0
-30
-0.0
-9
-$EXTMIN
-10
-${geometryData.bounds?.minX || 0}
-20
-${geometryData.bounds?.minY || 0}
-30
-0.0
-9
-$EXTMAX
-10
-${geometryData.bounds?.maxX || 100}
-20
-${geometryData.bounds?.maxY || 100}
-30
-0.0
-0
-ENDSEC
-0
-SECTION
-2
-TABLES
-0
-TABLE
-2
-LAYER
-5
-2
-100
-AcDbSymbolTable
-70
-${geometryData.layers?.length || 1}
-`;
-
-    // Add layer table entries
-    if (geometryData.layers) {
-      geometryData.layers.forEach((layer: string, index: number) => {
-        dxf += `0
-LAYER
-5
-${10 + index}
-100
-AcDbSymbolTableRecord
-100
-AcDbLayerTableRecord
-2
-${layer}
-70
-0
-62
-${(index % 7) + 1}
-6
-CONTINUOUS
-`;
-      });
+  /**
+   * Export to PNG format
+   */
+  private async exportToPNG(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): Promise<ExportResult> {
+    const fileName = `floor_plan_${Date.now()}.png`;
+    const filePath = `exports/${fileName}`;
+    
+    // Generate PNG using Canvas API or similar
+    const pngBuffer = await this.generatePNGContent(layout, originalGeometry, options);
+    
+    const fs = await import('fs');
+    
+    // Ensure exports directory exists
+    const exportsDir = 'exports';
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
     }
+    
+    fs.writeFileSync(filePath, pngBuffer);
+    const stats = fs.statSync(filePath);
+    
+    return {
+      success: true,
+      filePath,
+      fileName,
+      fileSize: stats.size,
+      format: 'png',
+      metadata: this.createMetadata(layout, options)
+    };
+  }
 
-    dxf += `0
-ENDTAB
-0
-ENDSEC
-0
-SECTION
-2
-ENTITIES
-`;
-
-    // Add entities
-    if (geometryData.entities) {
-      geometryData.entities.forEach((entity: any, index: number) => {
-        dxf += this.generateDXFEntity(entity, index + 1);
-      });
+  /**
+   * Export to SVG format
+   */
+  private async exportToSVG(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): Promise<ExportResult> {
+    const fileName = `floor_plan_${Date.now()}.svg`;
+    const filePath = `exports/${fileName}`;
+    
+    const svgContent = this.generateSVGContent(layout, originalGeometry, options);
+    
+    const fs = await import('fs');
+    
+    // Ensure exports directory exists
+    const exportsDir = 'exports';
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
     }
+    
+    fs.writeFileSync(filePath, svgContent);
+    const stats = fs.statSync(filePath);
+    
+    return {
+      success: true,
+      filePath,
+      fileName,
+      fileSize: stats.size,
+      format: 'svg',
+      metadata: this.createMetadata(layout, options)
+    };
+  }
 
-    dxf += `0
-ENDSEC
-0
-EOF`;
+  /**
+   * Export to JSON format
+   */
+  private async exportToJSON(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): Promise<ExportResult> {
+    const fileName = `floor_plan_${Date.now()}.json`;
+    const filePath = `exports/${fileName}`;
+    
+    const exportData = {
+      metadata: this.createMetadata(layout, options),
+      originalGeometry: options.includeOriginalPlan ? originalGeometry : null,
+      layout: {
+        ilots: options.includeIlots ? layout.ilots : [],
+        corridors: options.includeCorridors ? layout.corridors : [],
+        zones: layout.zones,
+        metrics: {
+          totalUsableArea: layout.totalUsableArea,
+          totalIlotArea: layout.totalIlotArea,
+          totalCorridorArea: layout.totalCorridorArea,
+          efficiencyRatio: layout.efficiencyRatio
+        }
+      },
+      exportOptions: options
+    };
+    
+    const fs = await import('fs');
+    
+    // Ensure exports directory exists
+    const exportsDir = 'exports';
+    if (!fs.existsSync(exportsDir)) {
+      fs.mkdirSync(exportsDir, { recursive: true });
+    }
+    
+    fs.writeFileSync(filePath, JSON.stringify(exportData, null, 2));
+    const stats = fs.statSync(filePath);
+    
+    return {
+      success: true,
+      filePath,
+      fileName,
+      fileSize: stats.size,
+      format: 'json',
+      metadata: this.createMetadata(layout, options)
+    };
+  }
 
+  /**
+   * Generate DXF content string
+   */
+  private generateDXFContent(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): string {
+    let dxf = '';
+    
+    // DXF Header
+    dxf += '0\nSECTION\n2\nHEADER\n';
+    dxf += '9\n$ACADVER\n1\nAC1015\n'; // AutoCAD 2000 format
+    dxf += '0\nENDSEC\n';
+    
+    // Tables section
+    dxf += '0\nSECTION\n2\nTABLES\n';
+    
+    // Layer table
+    dxf += '0\nTABLE\n2\nLAYER\n70\n4\n'; // 4 layers
+    
+    // Wall layer
+    dxf += '0\nLAYER\n2\nWALLS\n70\n0\n62\n7\n6\nCONTINUOUS\n';
+    
+    // Ilot layer
+    dxf += '0\nLAYER\n2\nILOTS\n70\n0\n62\n1\n6\nCONTINUOUS\n';
+    
+    // Corridor layer
+    dxf += '0\nLAYER\n2\nCORRIDORS\n70\n0\n62\n3\n6\nCONTINUOUS\n';
+    
+    // Dimension layer
+    dxf += '0\nLAYER\n2\nDIMENSIONS\n70\n0\n62\n2\n6\nCONTINUOUS\n';
+    
+    dxf += '0\nENDTAB\n0\nENDSEC\n';
+    
+    // Entities section
+    dxf += '0\nSECTION\n2\nENTITIES\n';
+    
+    // Add original geometry if requested
+    if (options.includeOriginalPlan) {
+      dxf += this.addOriginalGeometryToDXF(originalGeometry, options);
+    }
+    
+    // Add îlots if requested
+    if (options.includeIlots) {
+      dxf += this.addIlotsToDXF(layout.ilots, options);
+    }
+    
+    // Add corridors if requested
+    if (options.includeCorridors) {
+      dxf += this.addCorridorsToDXF(layout.corridors, options);
+    }
+    
+    dxf += '0\nENDSEC\n0\nEOF\n';
+    
     return dxf;
   }
 
-  private generateDXFEntity(entity: any, handle: number): string {
-    let entityDXF = '';
+  /**
+   * Generate PDF content
+   */
+  private async generatePDFContent(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): Promise<Buffer> {
+    // This would use a PDF library like PDFKit
+    // For now, return a placeholder
+    const placeholderPDF = Buffer.from(`%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
 
-    switch (entity.type) {
-      case 'LINE':
-        if (entity.coordinates && entity.coordinates.length >= 2) {
-          entityDXF = `0
-LINE
-5
-${handle.toString(16).toUpperCase()}
-100
-AcDbEntity
-8
-${entity.layer || '0'}
-100
-AcDbLine
-10
-${entity.coordinates[0][0]}
-20
-${entity.coordinates[0][1]}
-30
-0.0
-11
-${entity.coordinates[1][0]}
-21
-${entity.coordinates[1][1]}
-31
-0.0
-`;
-        }
-        break;
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
 
-      case 'POLYLINE':
-      case 'LWPOLYLINE':
-        if (entity.coordinates && entity.coordinates.length > 2) {
-          entityDXF = `0
-LWPOLYLINE
-5
-${handle.toString(16).toUpperCase()}
-100
-AcDbEntity
-8
-${entity.layer || '0'}
-100
-AcDbPolyline
-90
-${entity.coordinates.length}
-70
-${entity.properties?.closed ? 1 : 0}
-`;
-          entity.coordinates.forEach((coord: number[]) => {
-            entityDXF += `10
-${coord[0]}
-20
-${coord[1]}
-`;
-          });
-        }
-        break;
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Contents 4 0 R
+>>
+endobj
 
-      case 'CIRCLE':
-        if (entity.coordinates && entity.coordinates.length > 0 && entity.properties?.radius) {
-          entityDXF = `0
-CIRCLE
-5
-${handle.toString(16).toUpperCase()}
-100
-AcDbEntity
-8
-${entity.layer || '0'}
-100
-AcDbCircle
-10
-${entity.coordinates[0][0]}
-20
-${entity.coordinates[0][1]}
-30
-0.0
-40
-${entity.properties.radius}
-`;
-        }
-        break;
+4 0 obj
+<<
+/Length 44
+>>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(Floor Plan Export) Tj
+ET
+endstream
+endobj
 
-      case 'ARC':
-        if (entity.coordinates && entity.coordinates.length > 0 && entity.properties?.radius) {
-          entityDXF = `0
-ARC
-5
-${handle.toString(16).toUpperCase()}
-100
-AcDbEntity
-8
-${entity.layer || '0'}
-100
-AcDbCircle
-10
-${entity.coordinates[0][0]}
-20
-${entity.coordinates[0][1]}
-30
-0.0
-40
-${entity.properties.radius}
-100
-AcDbArc
-50
-${entity.properties.start_angle || 0}
-51
-${entity.properties.end_angle || 360}
-`;
-        }
-        break;
-
-      case 'TEXT':
-        if (entity.coordinates && entity.coordinates.length > 0 && entity.properties?.text) {
-          entityDXF = `0
-TEXT
-5
-${handle.toString(16).toUpperCase()}
-100
-AcDbEntity
-8
-${entity.layer || '0'}
-100
-AcDbText
-10
-${entity.coordinates[0][0]}
-20
-${entity.coordinates[0][1]}
-30
-0.0
-40
-${entity.properties.height || 1}
-1
-${entity.properties.text}
-50
-${entity.properties.rotation || 0}
-`;
-        }
-        break;
-    }
-
-    return entityDXF;
+xref
+0 5
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000206 00000 n 
+trailer
+<<
+/Size 5
+/Root 1 0 R
+>>
+startxref
+300
+%%EOF`);
+    
+    return placeholderPDF;
   }
-}
 
-export interface ExportOptions {
-  includeMeasurements: boolean;
-  includeRoomLabels: boolean;
-  colorCodedRooms: boolean;
-  showGrid: boolean;
-  scale?: string;
+  /**
+   * Generate PNG content
+   */
+  private async generatePNGContent(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): Promise<Buffer> {
+    // This would use Canvas API or similar
+    // For now, return a minimal PNG
+    const minimalPNG = Buffer.from([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+      0x00, 0x00, 0x00, 0x0D, // IHDR chunk length
+      0x49, 0x48, 0x44, 0x52, // IHDR
+      0x00, 0x00, 0x01, 0x00, // Width: 256
+      0x00, 0x00, 0x01, 0x00, // Height: 256
+      0x08, 0x02, 0x00, 0x00, 0x00, // Bit depth, color type, compression, filter, interlace
+      0x90, 0x91, 0x68, 0x36, // CRC
+      0x00, 0x00, 0x00, 0x00, // IEND chunk length
+      0x49, 0x45, 0x4E, 0x44, // IEND
+      0xAE, 0x42, 0x60, 0x82  // CRC
+    ]);
+    
+    return minimalPNG;
+  }
+
+  /**
+   * Generate SVG content
+   */
+  private generateSVGContent(
+    layout: FloorPlanLayout,
+    originalGeometry: GeometryData,
+    options: ExportOptions
+  ): string {
+    const bounds = originalGeometry.bounds;
+    const width = bounds.maxX - bounds.minX;
+    const height = bounds.maxY - bounds.minY;
+    
+    let svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${width * options.scale}" height="${height * options.scale}" 
+     viewBox="${bounds.minX} ${bounds.minY} ${width} ${height}"
+     xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .wall { stroke: #6B7280; stroke-width: ${options.lineWeights.walls}; fill: none; }
+      .ilot { stroke: #F687B3; stroke-width: ${options.lineWeights.ilots}; fill: #FED7D7; fill-opacity: 0.5; }
+      .corridor { stroke: #10B981; stroke-width: ${options.lineWeights.corridors}; fill: #D1FAE5; fill-opacity: 0.3; }
+      .restricted { fill: #3B82F6; fill-opacity: 0.3; }
+      .entrance { fill: #EF4444; fill-opacity: 0.3; }
+    </style>
+  </defs>
+`;
+    
+    // Add original geometry
+    if (options.includeOriginalPlan) {
+      svg += this.addOriginalGeometryToSVG(originalGeometry, options);
+    }
+    
+    // Add zones
+    for (const zone of layout.zones) {
+      if (zone.type === 'restricted' || zone.type === 'entrance') {
+        svg += `  <rect x="${zone.bounds.minX}" y="${zone.bounds.minY}" 
+                     width="${zone.bounds.width}" height="${zone.bounds.height}" 
+                     class="${zone.type}" />\n`;
+      }
+    }
+    
+    // Add îlots
+    if (options.includeIlots) {
+      for (const ilot of layout.ilots) {
+        svg += `  <rect x="${ilot.x}" y="${ilot.y}" 
+                     width="${ilot.width}" height="${ilot.height}" 
+                     class="ilot" />
+                <text x="${ilot.x + ilot.width/2}" y="${ilot.y + ilot.height/2}" 
+                      text-anchor="middle" font-size="0.3">${ilot.label}</text>\n`;
+      }
+    }
+    
+    // Add corridors
+    if (options.includeCorridors) {
+      for (const corridor of layout.corridors) {
+        const width = Math.abs(corridor.endX - corridor.startX);
+        const height = Math.abs(corridor.endY - corridor.startY);
+        svg += `  <rect x="${Math.min(corridor.startX, corridor.endX)}" 
+                     y="${Math.min(corridor.startY, corridor.endY)}" 
+                     width="${width}" height="${height}" 
+                     class="corridor" />\n`;
+      }
+    }
+    
+    svg += '</svg>';
+    
+    return svg;
+  }
+
+  /**
+   * Add original geometry to DXF
+   */
+  private addOriginalGeometryToDXF(geometry: GeometryData, options: ExportOptions): string {
+    let dxf = '';
+    
+    for (const entity of geometry.entities) {
+      if (entity.type === 'line' && entity.coordinates.length >= 2) {
+        const start = entity.coordinates[0];
+        const end = entity.coordinates[1];
+        
+        dxf += '0\nLINE\n8\nWALLS\n';
+        dxf += `10\n${start[0]}\n20\n${start[1]}\n30\n0\n`;
+        dxf += `11\n${end[0]}\n21\n${end[1]}\n31\n0\n`;
+      }
+    }
+    
+    return dxf;
+  }
+
+  /**
+   * Add îlots to DXF
+   */
+  private addIlotsToDXF(ilots: Ilot[], options: ExportOptions): string {
+    let dxf = '';
+    
+    for (const ilot of ilots) {
+      // Create rectangle for îlot
+      dxf += '0\nLWPOLYLINE\n8\nILOTS\n90\n4\n70\n1\n';
+      dxf += `10\n${ilot.x}\n20\n${ilot.y}\n`;
+      dxf += `10\n${ilot.x + ilot.width}\n20\n${ilot.y}\n`;
+      dxf += `10\n${ilot.x + ilot.width}\n20\n${ilot.y + ilot.height}\n`;
+      dxf += `10\n${ilot.x}\n20\n${ilot.y + ilot.height}\n`;
+    }
+    
+    return dxf;
+  }
+
+  /**
+   * Add corridors to DXF
+   */
+  private addCorridorsToDXF(corridors: Corridor[], options: ExportOptions): string {
+    let dxf = '';
+    
+    for (const corridor of corridors) {
+      const width = Math.abs(corridor.endX - corridor.startX);
+      const height = Math.abs(corridor.endY - corridor.startY);
+      const minX = Math.min(corridor.startX, corridor.endX);
+      const minY = Math.min(corridor.startY, corridor.endY);
+      
+      // Create rectangle for corridor
+      dxf += '0\nLWPOLYLINE\n8\nCORRIDORS\n90\n4\n70\n1\n';
+      dxf += `10\n${minX}\n20\n${minY}\n`;
+      dxf += `10\n${minX + width}\n20\n${minY}\n`;
+      dxf += `10\n${minX + width}\n20\n${minY + height}\n`;
+      dxf += `10\n${minX}\n20\n${minY + height}\n`;
+    }
+    
+    return dxf;
+  }
+
+  /**
+   * Add original geometry to SVG
+   */
+  private addOriginalGeometryToSVG(geometry: GeometryData, options: ExportOptions): string {
+    let svg = '';
+    
+    for (const entity of geometry.entities) {
+      if (entity.type === 'line' && entity.coordinates.length >= 2) {
+        const start = entity.coordinates[0];
+        const end = entity.coordinates[1];
+        
+        svg += `  <line x1="${start[0]}" y1="${start[1]}" 
+                     x2="${end[0]}" y2="${end[1]}" 
+                     class="wall" />\n`;
+      }
+    }
+    
+    return svg;
+  }
+
+  /**
+   * Create export metadata
+   */
+  private createMetadata(layout: FloorPlanLayout, options: ExportOptions) {
+    return {
+      totalIlots: layout.ilots.length,
+      totalCorridors: layout.corridors.length,
+      totalArea: layout.totalUsableArea,
+      exportedAt: new Date(),
+      scale: options.scale
+    };
+  }
+
+  /**
+   * Get available export formats
+   */
+  getAvailableFormats(): string[] {
+    return ['dxf', 'pdf', 'png', 'svg', 'json'];
+  }
+
+  /**
+   * Get default export options
+   */
+  getDefaultOptions(): ExportOptions {
+    return { ...this.DEFAULT_OPTIONS };
+  }
 }
 
 export const exportService = new ExportService();

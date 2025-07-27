@@ -1,21 +1,14 @@
 services:
   - type: web
-    name: floorplan-processor
+    name: dxf-visual-ilot-pro
     env: node
-    plan: starter
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: floorplan-db
-          property: connectionString
-    healthCheckPath: /api/health
 
 databases:
-  - name: floorplan-db
-    databaseName: floorplan_processor
-    user: floorplan_user
-    plan: starter
+  - name: dxf-visual-ilot-pro-db
+    databaseName: dwg_analyzer_pro
+    user: dxf_user

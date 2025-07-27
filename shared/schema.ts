@@ -118,6 +118,32 @@ export interface GeometryData {
   blocks: Record<string, any[]>;
 }
 
+export interface PointData {
+    x: number;
+    y: number;
+}
+
+export interface Wall {
+    id: string;
+    start: PointData;
+    end: PointData;
+    thickness: number;
+}
+
+export interface Zone {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+export interface FloorPlanData extends Omit<FloorPlan, 'geometryData' | 'roomsData' | 'measurementsData' | 'ilotLayout'> {
+    walls: Wall[];
+    restrictedAreas: Zone[];
+    entrances: Zone[];
+}
+
 export type RoomDetectionResult = {
   rooms: Array<{
     id: string;
@@ -133,6 +159,35 @@ export type RoomDetectionResult = {
   totalArea: number;
   confidence: number;
 };
+
+
+export interface Ilot {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface Corridor {
+  id: string;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  width: number;
+  connectedIlots: string[];
+  length: number;
+}
+
+export interface Rectangle {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  width: number;
+  height: number;
+}
 
 export type ProcessingResult = {
   floorPlan: FloorPlan;
