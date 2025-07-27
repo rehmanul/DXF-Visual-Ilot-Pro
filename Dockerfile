@@ -16,7 +16,7 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY scripts/ ./scripts/
 
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN groupadd -g 1001 nodejs && useradd -r -u 1001 -g nodejs nodejs
 RUN mkdir -p uploads exports && chown -R nodejs:nodejs /app
 
 USER nodejs
