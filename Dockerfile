@@ -17,14 +17,16 @@ COPY --from=python-deps /usr/local/lib/python3.9/site-packages /usr/local/lib/py
 
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY scripts/ ./scripts/
 
+# Install only production dependencies
+RUN npm ci --only=production
+
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
-RUN mkdir -p uploads exports && chown -R nodejs:nodejs uploads exports
+RUN mkdir -p uploads exports && chown -R nodejs:nodejs uploads exports /app
 
 USER nodejs
-EXPOSE 3001
+EXPOSE 10000
 
 CMD ["node", "dist/index.js"]
