@@ -5,7 +5,8 @@ import * as schema from '@shared/schema';
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error('DATABASE_URL environment variable is required');
+  console.error('DATABASE_URL environment variable is required');
+  process.exit(1);
 }
 
 const client = postgres(connectionString, {
