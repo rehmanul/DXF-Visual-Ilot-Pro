@@ -108,11 +108,11 @@ export class MemStorage implements IStorage {
       id,
       label: insertMeasurement.label || null,
       unit: insertMeasurement.unit || "mm",
-      startX: insertMeasurement.startX || null,
-      startY: insertMeasurement.startY || null,
-      endX: insertMeasurement.endX || null,
-      endY: insertMeasurement.endY || null,
-      annotations: insertMeasurement.annotations || null,
+      startX: (insertMeasurement as any).startX || null,
+      startY: (insertMeasurement as any).startY || null,
+      endX: (insertMeasurement as any).endX || null,
+      endY: (insertMeasurement as any).endY || null,
+      annotations: (insertMeasurement as any).annotations || null,
     };
     this.measurements.set(id, measurement);
     return measurement;

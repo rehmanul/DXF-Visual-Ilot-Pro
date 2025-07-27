@@ -80,15 +80,15 @@ export const insertFloorPlanSchema = createInsertSchema(floorPlans).omit({
   id: true,
   uploadedAt: true,
   processedAt: true,
-});
+}).partial();
 
 export const insertRoomSchema = createInsertSchema(rooms).omit({
   id: true,
-});
+}).partial();
 
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   id: true,
-});
+}).partial();
 
 export type InsertFloorPlan = z.infer<typeof insertFloorPlanSchema>;
 export type FloorPlan = typeof floorPlans.$inferSelect;
