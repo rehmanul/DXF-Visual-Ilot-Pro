@@ -7,7 +7,7 @@ RUN npm run build
 
 FROM node:18-alpine AS production
 RUN apk add --no-cache python3 py3-pip
-RUN pip install --no-cache-dir ezdxf pdf2image opencv-python numpy Pillow
+RUN pip install --no-cache-dir --break-system-packages ezdxf pdf2image opencv-python numpy Pillow
 
 WORKDIR /app
 COPY package*.json ./
