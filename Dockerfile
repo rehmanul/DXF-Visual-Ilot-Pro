@@ -32,4 +32,4 @@ RUN mkdir -p uploads exports && chmod 755 uploads exports
 
 EXPOSE 10000
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/server/index.js"]
