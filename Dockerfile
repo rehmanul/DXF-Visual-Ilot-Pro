@@ -1,25 +1,28 @@
-FROM node:18-alpine AS builder
+FROM node:18-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create Python virtual environment and install packages
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install ezdxf pdf2image opencv-python-headless numpy Pillow
+
 WORKDIR /app
+
+# Install Node.js dependencies
 COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+RUN npm ci && npm cache clean --force
 
-FROM node:18-slim AS production
-RUN apt-get update && apt-get install -y python3 python3-pip python3-dev build-essential libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir --break-system-packages ezdxf pdf2image opencv-python-headless numpy Pillow
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
-
-COPY --from=builder /app/dist ./dist
+# Copy application files
+COPY dist/ ./dist/
 COPY scripts/ ./scripts/
 
-RUN groupadd -g 1001 nodejs && useradd -r -u 1001 -g nodejs nodejs
-RUN mkdir -p uploads exports && chown -R nodejs:nodejs /app
+# Create directories and set permissions
+RUN mkdir -p uploads exports && chmod 755 uploads exports
 
-USER nodejs
 EXPOSE 10000
 
 CMD ["node", "dist/index.js"]
