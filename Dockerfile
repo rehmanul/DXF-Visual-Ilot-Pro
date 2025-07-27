@@ -5,9 +5,9 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:18-alpine AS production
-RUN apk add --no-cache python3 py3-pip
-RUN pip install --no-cache-dir --break-system-packages ezdxf pdf2image opencv-python numpy Pillow
+FROM node:18-slim AS production
+RUN apt-get update && apt-get install -y python3 python3-pip python3-dev build-essential libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir ezdxf pdf2image opencv-python-headless numpy Pillow
 
 WORKDIR /app
 COPY package*.json ./
