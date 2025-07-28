@@ -88,6 +88,15 @@ export class MemStorage implements IStorage {
     const room: Room = {
       ...insertRoom,
       id,
+      name: insertRoom.name || 'Room',
+      floorPlanId: insertRoom.floorPlanId || 1,
+      type: insertRoom.type || 'room',
+      area: insertRoom.area || 0,
+      color: insertRoom.color || '#ffffff',
+      minX: insertRoom.minX || 0,
+      minY: insertRoom.minY || 0,
+      maxX: insertRoom.maxX || 0,
+      maxY: insertRoom.maxY || 0,
       width: insertRoom.width || null,
       height: insertRoom.height || null,
       shape: insertRoom.shape || null,
@@ -106,13 +115,16 @@ export class MemStorage implements IStorage {
     const measurement: Measurement = {
       ...insertMeasurement,
       id,
-      label: insertMeasurement.label || null,
+      floorPlanId: insertMeasurement.floorPlanId || 1,
+      type: insertMeasurement.type || 'length',
+      value: insertMeasurement.value || 0,
       unit: insertMeasurement.unit || "mm",
-      startX: (insertMeasurement as any).startX || null,
-      startY: (insertMeasurement as any).startY || null,
-      endX: (insertMeasurement as any).endX || null,
-      endY: (insertMeasurement as any).endY || null,
-      annotations: (insertMeasurement as any).annotations || null,
+      label: insertMeasurement.label || null,
+      startX: insertMeasurement.startX || null,
+      startY: insertMeasurement.startY || null,
+      endX: insertMeasurement.endX || null,
+      endY: insertMeasurement.endY || null,
+      annotations: insertMeasurement.annotations || null,
     };
     this.measurements.set(id, measurement);
     return measurement;

@@ -1,9 +1,8 @@
 import { createServer as createViteServer } from 'vite';
-import { fileURLToPath } from 'url';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function createViteMiddleware() {
   if (process.env.NODE_ENV === 'production') {
