@@ -2,12 +2,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '@shared/schema';
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  console.error('DATABASE_URL environment variable is required');
-  process.exit(1);
-}
+const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/dxf_visual_ilot';
 
 const client = postgres(connectionString, {
   max: 10,

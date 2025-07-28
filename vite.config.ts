@@ -1,38 +1,40 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
+import csp from 'vite-plugin-csp'
+import { fileURLToPath } from 'url'
 
-export default defineConfig({
+const __filename = fileURLToPath( import.meta.url )
+const __dirname = path.dirname( __filename )
+
+// https://vitejs.dev/config/
+export default defineConfig( {
+  root: 'client',
   plugins: [
     react(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-        ]
-      : []),
+    csp( {
+      policy: {
+        'script-src': [ 'self', 'unsafe-inline' ],
+      },
+    } ),
   ],
   resolve: {
     alias: {
-      "@": path.resolve(process.cwd(), "client", "src"),
-      "@shared": path.resolve(process.cwd(), "shared"),
-      "@assets": path.resolve(process.cwd(), "attached_assets"),
+      '@': path.resolve( __dirname, 'client/src' ),
     },
-  },
-  root: path.resolve(process.cwd(), "client"),
-  build: {
-    outDir: path.resolve(process.cwd(), "dist/public"),
-    emptyOutDir: true,
   },
   server: {
-    hmr: false,
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/socket.io': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
-});
+} )

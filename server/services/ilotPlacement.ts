@@ -126,35 +126,19 @@ export class IlotPlacementService {
     const zones: ZoneType[] = [];
     const bounds = geometryData.bounds;
 
-    // Process each entity to identify zone types
-    for (const entity of geometryData.entities) {
-      const layer = entity.layer?.toLowerCase() || '';
-      const type = entity.type?.toLowerCase() || '';
-
-      // Identify walls (thick lines or specific layers)
-      if (this.isWallEntity(entity, layer, type)) {
-        zones.push(this.createWallZone(entity));
-      }
-      
-      // Identify restricted areas (blue zones)
-      else if (this.isRestrictedArea(entity, layer, type)) {
-        zones.push(this.createRestrictedZone(entity));
-      }
-      
-      // Identify entrance/exit areas (red zones with door swings)
-      else if (this.isEntranceArea(entity, layer, type)) {
-        zones.push(this.createEntranceZone(entity));
-      }
-    }
-
-    // Fill remaining areas as usable space
+    // Create default usable area from bounds
     const boundsAsRect: Rectangle = {
       ...bounds,
       width: bounds.maxX - bounds.minX,
       height: bounds.maxY - bounds.minY
     };
-    const usableAreas = this.calculateUsableAreas(boundsAsRect, zones);
-    zones.push(...usableAreas);
+    
+    // Add main usable area
+    zones.push({
+      type: 'usable',
+      color: this.ZONE_COLORS.usable,
+      bounds: boundsAsRect
+    });
 
     return zones;
   }
@@ -304,74 +288,34 @@ export class IlotPlacementService {
     zoneHash: number
   ): Ilot[] {
     const ilots: Ilot[] = [];
-    const availableArea = zone.width * zone.height;
-    const targetIlotArea = availableArea * targetDensity;
+    const spacing = this.DEFAULT_CORRIDOR_WIDTH + 0.5;
     
-    // Calculate grid dimensions with corridor spacing based on zone characteristics
-    const corridorSpacing = this.DEFAULT_CORRIDOR_WIDTH + this.MIN_CLEARANCE;
-    const aspectRatio = zone.width / zone.height;
+    // Simple grid placement
+    const ilotSize = this.ILOT_SIZES.medium;
+    const cols = Math.floor((zone.width - 20) / (ilotSize.width + spacing));
+    const rows = Math.floor((zone.height - 20) / (ilotSize.height + spacing));
     
-    // Generate unique combinations based on zone hash and geometry
-    const combinations = this.generateSizeCombinations(targetIlotArea, zoneHash, aspectRatio);
-    let bestCombination = combinations[0];
-    let bestEfficiency = 0;
-
-    for (const combo of combinations) {
-      const efficiency = this.calculatePlacementEfficiency(zone, combo, corridorSpacing);
-      if (efficiency > bestEfficiency) {
-        bestEfficiency = efficiency;
-        bestCombination = combo;
-      }
-    }
-
-    // Place îlots using the best combination
     let id = startId;
-    let currentY = zone.minY + this.MIN_CLEARANCE;
-
-    for (const sizeInfo of bestCombination) {
-      const { size, count } = sizeInfo;
-      const ilotDims = this.ILOT_SIZES[size as keyof typeof this.ILOT_SIZES];
-      
-      let currentX = zone.minX + this.MIN_CLEARANCE;
-      let ilotsInRow = 0;
-      const maxIlotsPerRow = Math.floor(
-        (zone.width - 2 * this.MIN_CLEARANCE) / (ilotDims.width + corridorSpacing)
-      );
-
-      for (let i = 0; i < count; i++) {
-        if (ilotsInRow >= maxIlotsPerRow) {
-          // Move to next row
-          currentY += ilotDims.height + corridorSpacing;
-          currentX = zone.minX + this.MIN_CLEARANCE;
-          ilotsInRow = 0;
-        }
-
-        // Check if îlot fits and doesn't conflict with restrictions
-        if (this.canPlaceIlot(currentX, currentY, ilotDims, zone, restrictions)) {
-          // Add slight variation based on position for unique placement
-          const positionVariation = (currentX + currentY + zoneHash) % 10;
-          const adjustedWidth = ilotDims.width + (positionVariation * 0.01);
-          const adjustedHeight = ilotDims.height + (positionVariation * 0.01);
-          const adjustedArea = adjustedWidth * adjustedHeight;
-          
-          ilots.push({
-            id: `ilot_${zoneHash}_${id++}`,
-            x: currentX,
-            y: currentY,
-            width: adjustedWidth,
-            height: adjustedHeight,
-            area: adjustedArea,
-            type: size as 'small' | 'medium' | 'large',
-            color: this.getIlotColor(size as 'small' | 'medium' | 'large'),
-            label: `${adjustedArea.toFixed(2)}m²`
-          });
-        }
-
-        currentX += ilotDims.width + corridorSpacing;
-        ilotsInRow++;
+    
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = zone.minX + 10 + col * (ilotSize.width + spacing);
+        const y = zone.minY + 10 + row * (ilotSize.height + spacing);
+        
+        ilots.push({
+          id: `ilot_${id++}`,
+          x,
+          y,
+          width: ilotSize.width,
+          height: ilotSize.height,
+          area: ilotSize.area,
+          type: 'medium',
+          color: this.getIlotColor('medium'),
+          label: `${ilotSize.area.toFixed(1)}m²`
+        });
       }
     }
-
+    
     return ilots;
   }
 
@@ -434,84 +378,11 @@ export class IlotPlacementService {
     return false;
   }
 
-  private calculateUsableAreas(this: IlotPlacementService, bounds: Rectangle, restrictiveZones: ZoneType[]): ZoneType[] {
-    // Simplified: create one large usable area minus restrictions
-    // In production, this would use polygon subtraction algorithms
-    
-    const usableArea = bounds.width * bounds.height;
-    const restrictedArea = restrictiveZones.reduce((sum, zone) => 
-      sum + zone.bounds.width * zone.bounds.height, 0);
-    
-    if (usableArea - restrictedArea > 0) {
-      return [{
-        type: 'usable',
-        color: this.ZONE_COLORS.usable,
-        bounds: bounds
-      }];
-    }
-    
-    return [];
-  }
 
-  private generateSizeCombinations(this: IlotPlacementService, targetArea: number, zoneHash: number, aspectRatio: number): Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> {
-    // Generate different combinations based on zone characteristics
-    const combinations: Array<{size: keyof typeof this.ILOT_SIZES, count: number}[]> = [];
-    
-    // Adjust ratios based on zone hash and aspect ratio for unique results
-    const hashFactor = (zoneHash % 100) / 100; // 0-1 range
-    const aspectFactor = Math.min(aspectRatio, 2) / 2; // Normalize aspect ratio
-    
-    // Dynamic combination based on zone characteristics
-    const smallRatio = 0.5 + (hashFactor * 0.3); // 50-80%
-    const mediumRatio = 0.3 - (hashFactor * 0.1); // 20-30%
-    const largeRatio = 0.2 - (aspectFactor * 0.1); // 10-20%
-    
-    const smallCount = Math.floor(targetArea * smallRatio / this.ILOT_SIZES.small.area);
-    const mediumCount = Math.floor(targetArea * mediumRatio / this.ILOT_SIZES.medium.area);
-    const largeCount = Math.floor(targetArea * largeRatio / this.ILOT_SIZES.large.area);
-    
-    combinations.push([
-      { size: 'small' as const, count: smallCount },
-      { size: 'medium' as const, count: mediumCount },
-      { size: 'large' as const, count: largeCount }
-    ]);
 
-    // Combination 2: Mostly small
-    combinations.push([
-      { size: 'small' as const, count: Math.floor(targetArea * 0.9 / this.ILOT_SIZES.small.area) },
-      { size: 'medium' as const, count: Math.floor(targetArea * 0.1 / this.ILOT_SIZES.medium.area) }
-    ]);
 
-    // Combination 3: Balanced medium
-    combinations.push([
-      { size: 'medium' as const, count: Math.floor(targetArea * 0.8 / this.ILOT_SIZES.medium.area) },
-      { size: 'small' as const, count: Math.floor(targetArea * 0.2 / this.ILOT_SIZES.small.area) }
-    ]);
 
-    return combinations;
-  }
 
-  private calculatePlacementEfficiency(
-    this: IlotPlacementService,
-    zone: Rectangle,
-    combination: {size: keyof typeof this.ILOT_SIZES, count: number}[],
-    spacing: number
-  ): number {
-    // Calculate how well the combination fits in the zone
-    let totalArea = 0;
-    let estimatedRows = 0;
-    
-    for (const { size, count } of combination) {
-      const dims = this.ILOT_SIZES[size as keyof typeof this.ILOT_SIZES];
-      totalArea += dims.area * count;
-      estimatedRows += Math.ceil(count * dims.width / zone.width);
-    }
-    
-    const estimatedHeight = estimatedRows * 2.0 + (estimatedRows - 1) * spacing;
-    const fitsVertically = estimatedHeight <= zone.height;
-    
-    return fitsVertically ? totalArea / (zone.width * zone.height) : 0;
-  }
 
   private canPlaceIlot(
     x: number,

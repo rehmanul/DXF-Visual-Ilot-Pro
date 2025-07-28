@@ -1,24 +1,30 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "commonjs",
-    "outDir": "./dist",
-    "rootDir": "./",
-    "strict": false,
-    "noImplicitAny": false,
-    "noImplicitReturns": false,
-    "noImplicitThis": false,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
+    "useDefineForClassFields": true,
+    "lib": [ "ES2020", "DOM", "DOM.Iterable" ],
+    "module": "ESNext",
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["./shared/*"],
-      "@/*": ["./client/src/*"]
+      "@/*": [
+        "./client/src"
+      ],
+      "@shared/*": [
+        "./shared/*"
+      ]
     }
   },
-  "include": ["server/**/*", "shared/**/*"],
-  "exclude": ["node_modules", "dist", "client"]
+  "include": [ "client", "server", "shared" ],
+  "references": [ { "path": "./tsconfig.node.json" } ]
 }

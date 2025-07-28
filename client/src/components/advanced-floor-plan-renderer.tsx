@@ -82,19 +82,26 @@ export function AdvancedFloorPlanRenderer ( {
   // Drawing callbacks for PIXI.Graphics
   const drawWall = useCallback( ( g: PIXI.Graphics, wall: any ) =>
   {
-    g.clear()
-      .lineStyle( wall.thickness || 4, COLORS.WALL )
-      .moveTo( wall.start.x, wall.start.y )
-      .lineTo( wall.end.x, wall.end.y );
+    g.clear();
+    if ( wall.coordinates && wall.coordinates.length >= 2 )
+    {
+      g.lineStyle( wall.properties?.lineweight || 2, COLORS.WALL )
+        .moveTo( wall.coordinates[ 0 ][ 0 ], wall.coordinates[ 0 ][ 1 ] )
+        .lineTo( wall.coordinates[ 1 ][ 0 ], wall.coordinates[ 1 ][ 1 ] );
+    }
   }, [] );
 
   const drawZone = useCallback( ( g: PIXI.Graphics, zone: any, fill: number, stroke: number ) =>
   {
-    g.clear()
-      .beginFill( fill )
-      .lineStyle( 2, stroke )
-      .drawRect( zone.x, zone.y, zone.width, zone.height )
-      .endFill();
+    g.clear();
+    if ( zone.coordinates && zone.coordinates.length > 0 )
+    {
+      const polygon = zone.coordinates.flat();
+      g.beginFill( fill, 0.5 )
+        .lineStyle( 2, stroke )
+        .drawPolygon( polygon )
+        .endFill();
+    }
   }, [] );
 
   const drawIlot = useCallback( ( g: PIXI.Graphics, ilot: Ilot ) =>
