@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
 import { createServer } from 'http';
 import { setupVite } from './vite';
 import { registerRoutes } from './routes';
@@ -23,7 +24,10 @@ async function startServer ()
 
   if ( process.env.NODE_ENV === 'production' )
   {
-    // In production, serve the static files from the build folder.
+    app.use(express.static('dist'));
+    app.get('*', (req, res) => {
+      res.sendFile(path.resolve('dist', 'index.html'));
+    });
   } else
   {
     await setupVite( app, server );
