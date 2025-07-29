@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { ilotPlacementService } from '../services/ilotPlacement.js';
 import { cadProcessor } from '../services/cadProcessor.js';
-import { exportService } from '../services/exportService';
+import { exportService } from '../services/exportService.js';
 import { validateFileUpload, validateCorridorWidth } from '../middleware/validation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { db } from '../db';
