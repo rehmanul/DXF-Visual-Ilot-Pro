@@ -1,5 +1,5 @@
 // Mock database for development/testing when PostgreSQL is not available
-import { FloorPlan, Room, Measurement, GeometryData } from '@shared/schema';
+import { FloorPlan, Room, Measurement, GeometryData } from '../shared/schema.js';
 
 let mockFloorPlans: FloorPlan[] = [];
 let mockRooms: Room[] = [];

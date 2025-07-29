@@ -1,7 +1,4 @@
 import { GeometryData } from "@shared/schema";
-import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs/promises';
 
 export class ImageProcessor {
   /**

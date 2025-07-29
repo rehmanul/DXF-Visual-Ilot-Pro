@@ -189,6 +189,7 @@ export interface Rectangle {
   height: number;
 }
 
+
 export type ProcessingResult = {
   floorPlan: FloorPlan;
   rooms: Room[];

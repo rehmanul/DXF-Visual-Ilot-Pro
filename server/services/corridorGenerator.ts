@@ -1,5 +1,5 @@
-import { Ilot, Corridor, ZoneType, Rectangle } from './ilotPlacement';
-import { corridorOptimizer } from './corridorOptimizer';
+import { Ilot, Corridor, ZoneType, Rectangle } from './ilotPlacement.js';
+import { corridorOptimizer } from './corridorOptimizer.js';
 
 export class CorridorGenerator {
   private readonly DEFAULT_CORRIDOR_WIDTH = 1.2; // 1.2m default width as specified in requirements

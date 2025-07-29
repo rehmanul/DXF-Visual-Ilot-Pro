@@ -1,4 +1,4 @@
-import { Corridor, Ilot } from './ilotPlacement';
+import { Corridor, Ilot } from './ilotPlacement.js';
 
 export interface OptimizationResult {
   corridors: Corridor[];
@@ -22,7 +22,7 @@ export class CorridorOptimizer {
 
     let optimizedCorridors = [...corridors];
     const removedCorridors: string[] = [];
-    const mergedCorridors: Array<{ original: string[], merged: string }> = [];
+    const mergedCorridors: Array<{ original: string[]; merged: string }> = [];
 
     // Step 1: Remove redundant corridors using minimum spanning tree approach
     optimizedCorridors = this.removeRedundantCorridors(optimizedCorridors, ilots);
@@ -127,7 +127,8 @@ export class CorridorOptimizer {
         mst.push(corridor);
         
         // Merge components
-        const allComponents = ilotIds.map(id => this.findComponent(id, components));
+        const allConnectedIlots = new Set<string>();
+        const allComponents = ilotIds.map((id: any) => this.findComponent(id, components));
         const mergedComponent = new Set<string>();
         
         for (const component of allComponents) {
@@ -267,7 +268,7 @@ export class CorridorOptimizer {
       maxX = Math.max(maxX, adj.startX, adj.endX);
       maxY = Math.max(maxY, adj.startY, adj.endY);
       
-      adj.connectedIlots.forEach(id => allConnectedIlots.add(id));
+      adj.connectedIlots.forEach((id: any) => allConnectedIlots.add(id));
     }
     
     const length = Math.sqrt((maxX - minX) ** 2 + (maxY - minY) ** 2);
