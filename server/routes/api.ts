@@ -4,7 +4,7 @@ import { ilotPlacementService } from '../services/ilotPlacement.js';
 import { cadProcessor } from '../services/cadProcessor.js';
 import { exportService } from '../services/exportService.js';
 import { validateFileUpload, validateCorridorWidth } from '../middleware/validation.js';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/errorHandler.js';
 import { db } from '../db';
 import { floorPlans } from '@shared/schema';
 import { eq } from 'drizzle-orm';
