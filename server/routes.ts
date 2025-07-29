@@ -146,30 +146,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       switch (format) {
         case 'pdf':
-          buffer = await exportService.exportToPDF(floorPlan, rooms, measurements, options);
-          mimeType = 'application/pdf';
-          filename = `${floorPlan.originalName.split('.')[0]}_analysis.pdf`;
-          break;
-
         case 'excel':
-          buffer = await exportService.exportToExcel(floorPlan, rooms, measurements);
-          mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-          filename = `${floorPlan.originalName.split('.')[0]}_data.xlsx`;
-          break;
-
         case 'cad':
-          buffer = await exportService.exportToPDF(floorPlan, rooms, measurements, options);
-          mimeType = 'application/dxf';
-          filename = `${floorPlan.originalName.split('.')[0]}_processed.dxf`;
-          break;
-
         case 'png':
-          if (!req.body.canvasData) {
-            return res.status(400).json({ error: "Canvas data required for PNG export" });
+        default:
+          const result = await exportService.exportFloorPlan(
+            { ilots: [], corridors: [], zones: [], totalUsableArea: 0, totalIlotArea: 0, totalCorridorArea: 0, efficiencyRatio: 0 },
+            floorPlan.geometryData || { entities: [], bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, scale: 1, units: 'm', layers: [], blocks: {} },
+            { format: format as any }
+          );
+          
+          if (!result.success) {
+            return res.status(500).json({ error: result.error });
           }
-          buffer = await exportService.exportToPDF(floorPlan, rooms, measurements, options);
-          mimeType = 'image/png';
-          filename = `${floorPlan.originalName.split('.')[0]}_floorplan.png`;
+          
+          const fs = await import('fs');
+          buffer = fs.readFileSync(result.filePath!);
+          mimeType = format === 'pdf' ? 'application/pdf' : format === 'png' ? 'image/png' : 'application/octet-stream';
+          filename = result.fileName!;
           break;
 
         default:
