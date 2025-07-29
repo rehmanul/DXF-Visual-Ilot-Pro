@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { ilotPlacementService } from '../services/ilotPlacement';
+import { ilotPlacementService } from '../services/ilotPlacement.js';
 import { cadProcessor } from '../services/cadProcessor';
 import { exportService } from '../services/exportService';
 import { validateFileUpload, validateCorridorWidth } from '../middleware/validation';
