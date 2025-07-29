@@ -23,6 +23,11 @@ export default defineConfig( {
       '@': path.resolve( __dirname, 'client/src' ),
     },
   },
+  build: {
+    commonjsOptions: {
+      include: [/node_modules/]
+    }
+  },
   server: {
     proxy: {
       '/api': {
