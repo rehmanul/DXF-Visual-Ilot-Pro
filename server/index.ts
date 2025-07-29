@@ -4,7 +4,8 @@ import path from 'path';
 import { createServer } from 'http';
 // import { setupVite } from './vite';
 import { registerRoutes } from './routes.js';
-import { connectDB } from './db';
+import { connectDB } from './db.js';
+
 
 
 const app = express();
