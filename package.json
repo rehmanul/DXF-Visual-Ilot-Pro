@@ -5,8 +5,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "cross-env NODE_ENV=development PORT=${PORT} tsx server/index.ts",
-    "build": "tsc && vite build",
-    "start": "node dist/index.js",
+    "build": "tsc",
+    "start": "node dist/server/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "test": "jest"
