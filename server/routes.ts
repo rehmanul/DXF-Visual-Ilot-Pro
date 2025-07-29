@@ -145,14 +145,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let filename: string;
 
       switch (format) {
-        case 'pdf':
-        case 'excel':
-        case 'cad':
-        case 'png':
         default:
+          const geometryData = floorPlan.geometryData || { entities: [], bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, scale: 1, units: 'm', layers: [], blocks: {} };
           const result = await exportService.exportFloorPlan(
             { ilots: [], corridors: [], zones: [], totalUsableArea: 0, totalIlotArea: 0, totalCorridorArea: 0, efficiencyRatio: 0 },
-            floorPlan.geometryData || { entities: [], bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, scale: 1, units: 'm', layers: [], blocks: {} },
+            geometryData as any,
             { format: format as any }
           );
           

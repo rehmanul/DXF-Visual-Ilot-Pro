@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer } from 'http';
-import { setupVite } from './vite';
+// import { setupVite } from './vite';
 import { registerRoutes } from './routes';
 import { connectDB } from './db';
 
@@ -30,7 +30,7 @@ async function startServer ()
     });
   } else
   {
-    await setupVite( app, server );
+    // await setupVite( app, server );
   }
 
   server.listen( port, () =>
