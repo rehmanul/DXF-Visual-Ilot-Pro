@@ -7,8 +7,9 @@ import { roomDetectionService } from "./services/roomDetection";
 import { exportService, type ExportOptions } from "./services/exportService";
 import { AIRoomLabelingService } from "./services/aiRoomLabeling";
 import { ilotPlacementService } from "./services/ilotPlacement";
-import apiRoutes from "./routes/api";
+import apiRoutes from "./routes/api.js";
 import multer from "multer";
+
 import path from "path";
 import fs from "fs/promises";
 

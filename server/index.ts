@@ -3,8 +3,9 @@ import express from 'express';
 import path from 'path';
 import { createServer } from 'http';
 // import { setupVite } from './vite';
-import { registerRoutes } from './routes';
+import { registerRoutes } from './routes.js';
 import { connectDB } from './db';
+
 
 const app = express();
 const port = parseInt( process.env.PORT || '3001', 10 );
