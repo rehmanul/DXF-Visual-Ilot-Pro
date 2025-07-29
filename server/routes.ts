@@ -1,13 +1,13 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { insertFloorPlanSchema, insertRoomSchema, insertMeasurementSchema } from "@shared/schema";
-import { cadProcessor } from "./services/cadProcessor";
-import { roomDetectionService } from "./services/roomDetection";
-import { exportService, type ExportOptions } from "./services/exportService";
-import { AIRoomLabelingService } from "./services/aiRoomLabeling";
-import { ilotPlacementService } from "./services/ilotPlacement";
-import * as apiRoutes from "./routes/api";
+import { storage } from "./storage.js";
+import { insertFloorPlanSchema, insertRoomSchema, insertMeasurementSchema } from "../shared/schema.js";
+import { cadProcessor } from "./services/cadProcessor.js";
+import { roomDetectionService } from "./services/roomDetection.js";
+import { exportService, type ExportOptions } from "./services/exportService.js";
+import { AIRoomLabelingService } from "./services/aiRoomLabeling.js";
+import { ilotPlacementService } from "./services/ilotPlacement.js";
+import apiRoutes from "./routes/api.js";
 import multer from "multer";
 
 import path from "path";
@@ -34,7 +34,7 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register API routes
-  app.use('/api', apiRoutes.default || apiRoutes);
+  app.use('/api', apiRoutes);
 
   // Initialize AI service
   const aiLabelingService = new AIRoomLabelingService();

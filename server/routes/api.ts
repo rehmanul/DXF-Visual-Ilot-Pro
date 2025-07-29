@@ -98,4 +98,4 @@ router.post('/export/:id', asyncHandler(async (req: Request, res: Response) => {
   res.json(result);
 }));
 
-export = router;
+export default router;
