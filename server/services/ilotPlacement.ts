@@ -1,6 +1,6 @@
 
 import { GeometryData } from "@shared/schema";
-import { corridorGenerator } from "./corridorGenerator";
+import { corridorGenerator } from "./corridorGenerator.js";
 
 
 
