@@ -231,7 +231,7 @@ export class RoomDetectionService {
   }
   
   private generateRoomName(type: string, area: number): string {
-    const typeNames = {
+    const typeNames: Record<string, string> = {
       'living_room': 'Living Room',
       'bedroom': 'Bedroom',
       'kitchen': 'Kitchen',
@@ -245,7 +245,7 @@ export class RoomDetectionService {
   }
   
   private getRoomColor(type: string): string {
-    const colors = {
+    const colors: Record<string, string> = {
       'living_room': '#E3F2FD',
       'bedroom': '#F3E5F5',
       'kitchen': '#FFF3E0',

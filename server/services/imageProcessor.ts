@@ -55,7 +55,7 @@ export class ImageProcessor {
       
       console.log(`[Image Processor] Detected complexity: ${complexity}, aspect ratio: ${aspectRatio.toFixed(2)}`);
       
-      const entities = [];
+      const entities: any[] = [];
       const layers = new Set(['WALLS', 'DOORS', 'WINDOWS', 'ROOMS', 'FEATURES']);
       
       // Generate unique layout based on image characteristics

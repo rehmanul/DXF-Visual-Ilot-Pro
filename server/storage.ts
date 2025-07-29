@@ -38,6 +38,10 @@ export class MemStorage implements IStorage {
     const floorPlan: FloorPlan = {
       ...insertFloorPlan,
       id,
+      filename: insertFloorPlan.filename || 'unknown',
+      originalName: insertFloorPlan.originalName || 'unknown',
+      fileType: insertFloorPlan.fileType || 'unknown',
+      fileSize: insertFloorPlan.fileSize || 0,
       uploadedAt: new Date(),
       processedAt: null,
       status: insertFloorPlan.status || "uploading",
