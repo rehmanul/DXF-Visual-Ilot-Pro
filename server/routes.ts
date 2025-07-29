@@ -3,11 +3,12 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { insertFloorPlanSchema, insertRoomSchema, insertMeasurementSchema } from "@shared/schema";
 
-import { cadProcessor } from "./services/cadProcessor";
-import { roomDetectionService } from "./services/roomDetection";
-import { exportService, type ExportOptions } from "./services/exportService";
-import { AIRoomLabelingService } from "./services/aiRoomLabeling";
-import { ilotPlacementService } from "./services/ilotPlacement";
+import { cadProcessor } from "./services/cadProcessor.js";
+import { roomDetectionService } from "./services/roomDetection.js";
+import { exportService, type ExportOptions } from "./services/exportService.js";
+import { AIRoomLabelingService } from "./services/aiRoomLabeling.js";
+import { ilotPlacementService } from "./services/ilotPlacement.js";
+
 import apiRoutes from "./routes/api.js";
 import multer from "multer";
 
