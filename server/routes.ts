@@ -144,28 +144,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let mimeType: string;
       let filename: string;
 
-      switch (format) {
-        default:
-          const geometryData = floorPlan.geometryData || { entities: [], bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, scale: 1, units: 'm', layers: [], blocks: {} };
-          const result = await exportService.exportFloorPlan(
-            { ilots: [], corridors: [], zones: [], totalUsableArea: 0, totalIlotArea: 0, totalCorridorArea: 0, efficiencyRatio: 0 },
-            geometryData as any,
-            { format: format as any }
-          );
-          
-          if (!result.success) {
-            return res.status(500).json({ error: result.error });
-          }
-          
-          const fs = await import('fs');
-          buffer = fs.readFileSync(result.filePath!);
-          mimeType = format === 'pdf' ? 'application/pdf' : format === 'png' ? 'image/png' : 'application/octet-stream';
-          filename = result.fileName!;
-          break;
-
-        default:
-          return res.status(400).json({ error: "Invalid export format" });
+      const geometryData = floorPlan.geometryData || { entities: [], bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 }, scale: 1, units: 'm', layers: [], blocks: {} };
+      const result = await exportService.exportFloorPlan(
+        { ilots: [], corridors: [], zones: [], totalUsableArea: 0, totalIlotArea: 0, totalCorridorArea: 0, efficiencyRatio: 0 },
+        geometryData as any,
+        { format: format as any }
+      );
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
       }
+      
+      const fs = await import('fs');
+      buffer = fs.readFileSync(result.filePath!);
+      mimeType = format === 'pdf' ? 'application/pdf' : format === 'png' ? 'image/png' : 'application/octet-stream';
+      filename = result.fileName!;
 
       res.setHeader('Content-Type', mimeType);
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
