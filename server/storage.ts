@@ -1,4 +1,5 @@
-import { floorPlans, rooms, measurements, type FloorPlan, type InsertFloorPlan, type Room, type InsertRoom, type Measurement, type InsertMeasurement } from "@shared/schema";
+import { floorPlans, rooms, measurements, type FloorPlan, type InsertFloorPlan, type Room, type InsertRoom, type Measurement, type InsertMeasurement } from "../shared/schema.js";
+
 
 export interface IStorage {
   // Floor plans

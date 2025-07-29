@@ -2,6 +2,8 @@
 import { GeometryData } from "@shared/schema";
 import { corridorGenerator } from "./corridorGenerator";
 
+
+
 export interface Point {
   x: number;
   y: number;
