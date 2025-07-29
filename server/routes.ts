@@ -7,7 +7,7 @@ import { roomDetectionService } from "./services/roomDetection";
 import { exportService, type ExportOptions } from "./services/exportService";
 import { AIRoomLabelingService } from "./services/aiRoomLabeling";
 import { ilotPlacementService } from "./services/ilotPlacement";
-import apiRoutes from "./routes/api";
+import * as apiRoutes from "./routes/api";
 import multer from "multer";
 
 import path from "path";
@@ -34,7 +34,7 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register API routes
-  app.use('/api', apiRoutes);
+  app.use('/api', apiRoutes.default || apiRoutes);
 
   // Initialize AI service
   const aiLabelingService = new AIRoomLabelingService();

@@ -7,6 +7,7 @@ import { validateFileUpload, validateCorridorWidth } from '../middleware/validat
 import { asyncHandler } from '../middleware/errorHandler';
 import { db } from '../db';
 import { floorPlans } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -27,7 +28,7 @@ router.post('/extract-base-plan', upload.single('file'), validateFileUpload, asy
   }).returning();
 
   try {
-    const basePlanData = await cadProcessor.processCADFile(file.path, file.mimetype, 'base');
+    const basePlanData = await cadProcessor.processCADFile(file.path, file.mimetype);
 
     await db.update(floorPlans)
       .set({
@@ -35,7 +36,7 @@ router.post('/extract-base-plan', upload.single('file'), validateFileUpload, asy
         geometryData: basePlanData,
         processedAt: new Date()
       })
-      .where(floorPlans.id, floorPlan.id);
+      .where(eq(floorPlans.id, floorPlan.id));
 
     res.json({ success: true, floorPlanId: floorPlan.id, basePlanData });
   } catch (error) {
@@ -44,7 +45,7 @@ router.post('/extract-base-plan', upload.single('file'), validateFileUpload, asy
         status: 'error',
         errorMessage: error instanceof Error ? error.message : 'Processing failed'
       })
-      .where(floorPlans.id, floorPlan.id);
+      .where(eq(floorPlans.id, floorPlan.id));
 
     throw error;
   }
@@ -54,7 +55,7 @@ router.post('/generate-layout/:id', validateCorridorWidth, asyncHandler(async (r
   const floorPlanId = parseInt(req.params.id);
   const { corridorWidth = 1.2, targetDensity = 0.6 } = req.body;
 
-  const [floorPlan] = await db.select().from(floorPlans).where(floorPlans.id, floorPlanId);
+  const [floorPlan] = await db.select().from(floorPlans).where(eq(floorPlans.id, floorPlanId));
 
   if (!floorPlan || !floorPlan.geometryData) {
     return res.status(404).json({ error: 'Floor plan not found or not processed' });
@@ -73,7 +74,7 @@ router.post('/generate-layout/:id', validateCorridorWidth, asyncHandler(async (r
       totalCorridors: layout.corridors.length,
       spaceEfficiency: layout.efficiencyRatio
     })
-    .where(floorPlans.id, floorPlanId);
+    .where(eq(floorPlans.id, floorPlanId));
 
   res.json({ success: true, layout });
 }));
@@ -82,7 +83,7 @@ router.post('/export/:id', asyncHandler(async (req: Request, res: Response) => {
   const floorPlanId = parseInt(req.params.id);
   const exportOptions = req.body;
 
-  const [floorPlan] = await db.select().from(floorPlans).where(floorPlans.id, floorPlanId);
+  const [floorPlan] = await db.select().from(floorPlans).where(eq(floorPlans.id, floorPlanId));
 
   if (!floorPlan || !floorPlan.ilotLayout) {
     return res.status(404).json({ error: 'Floor plan layout not found' });
@@ -96,3 +97,5 @@ router.post('/export/:id', asyncHandler(async (req: Request, res: Response) => {
 
   res.json(result);
 }));
+
+export = router;
