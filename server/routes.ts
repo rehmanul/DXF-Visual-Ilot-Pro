@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { insertFloorPlanSchema, insertRoomSchema, insertMeasurementSchema } from "@shared/schema";
+import { insertFloorPlanSchema, insertRoomSchema, insertMeasurementSchema } from "../shared/schema.js";
+
 
 import { cadProcessor } from "./services/cadProcessor.js";
 import { roomDetectionService } from "./services/roomDetection.js";
